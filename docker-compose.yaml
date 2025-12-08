@@ -25,7 +25,6 @@ services:
       MYSQL_ROOT_PASSWORD: mysql123
       MYSQL_DATABASE: darsinurse
       TZ: Asia/Jakarta
-    command: --default-authentication-plugin=mysql_native_password
     ports:
       - "3306:3306"
     volumes:
