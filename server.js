@@ -21,11 +21,12 @@ const PORT = process.env.PORT || 4000;
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASS || '',
+  password: process.env.DB_PASSWORD || '',   // <-- FIX DI SINI
   database: process.env.DB_NAME || 'darsinurse',
   waitForConnections: true,
   connectionLimit: 10
 });
+
 
 // Cek koneksi
 pool.getConnection()
