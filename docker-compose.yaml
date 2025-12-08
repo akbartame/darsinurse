@@ -10,8 +10,6 @@ services:
       DB_USER: root
       DB_PASSWORD: your_mysql_password
       DB_NAME: darsinurse
-    volumes:
-      - .:/app
 
   adminer:
     container_name: adminer
