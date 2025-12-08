@@ -178,8 +178,18 @@
       color: #555;
     }
 
+    .info-box.admin-box {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      margin-top: 15px;
+    }
+
     .info-box strong {
       color: var(--primary-blue);
+    }
+
+    .admin-box strong {
+      color: #856404;
     }
 
     .demo-creds {
@@ -199,6 +209,31 @@
       border-radius: 3px;
       font-family: 'Courier New', monospace;
       color: var(--primary-blue);
+    }
+
+    .admin-box .demo-creds code {
+      background: #fff;
+      color: #856404;
+    }
+
+    .role-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 5px;
+      vertical-align: middle;
+    }
+
+    .badge-admin {
+      background: #ffc107;
+      color: #212529;
+    }
+
+    .badge-nurse {
+      background: #28a745;
+      color: white;
     }
   </style>
 </head>
@@ -223,14 +258,14 @@
     <!-- Form Login -->
     <form method="POST" action="/login">
       <div class="form-group">
-        <label for="id_perawat">ID Perawat</label>
+        <label for="id_perawat">ID User</label>
         <div class="input-group">
           <i class="fas fa-user input-icon"></i>
           <input 
             type="text" 
             id="id_perawat" 
             name="id_perawat" 
-            placeholder="Contoh: P001" 
+            placeholder="Contoh: P001 atau ADMIN01" 
             required
             autocomplete="off"
           >
@@ -256,9 +291,19 @@
       </button>
     </form>
 
-    <!-- Info Box -->
+    <!-- Admin Info Box -->
+    <div class="info-box admin-box">
+      <strong><i class="fas fa-user-shield"></i> Akun Administrator:</strong>
+      <span class="role-badge badge-admin">ADMIN</span>
+      <div class="demo-creds">
+        <p><code>ID: ADMIN01</code> | <code>Pass: admin123</code></p>
+      </div>
+    </div>
+
+    <!-- Perawat Info Box -->
     <div class="info-box">
-      <strong><i class="fas fa-info-circle"></i> Akun Demo:</strong>
+      <strong><i class="fas fa-user-nurse"></i> Akun Perawat:</strong>
+      <span class="role-badge badge-nurse">PERAWAT</span>
       <div class="demo-creds">
         <p><code>ID: P001</code> | <code>Pass: pass123</code></p>
         <p><code>ID: P002</code> | <code>Pass: pass456</code></p>
