@@ -1,7 +1,8 @@
-// ============================================
-// DARSINURSE GATEWAY - Express.js + MariaDB
-// Medis IoT dengan Web Bluetooth API
-// ============================================
+/* ============================================================
+   DARSINURSE GATEWAY - Node.js + Express + MySQL
+   Medical IoT Gateway using Web Bluetooth API
+   © 2025 - Darsinurse System
+   ============================================================ */
 
 const express = require('express');
 const session = require('express-session');
@@ -9,11 +10,14 @@ const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const path = require('path');
 const crypto = require('crypto');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// ============ MARIADB CONNECTION POOL ============
+/* ============================================================
+   DATABASE CONNECTION (MySQL)
+   ============================================================ */
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -26,18 +30,21 @@ const pool = mysql.createPool({
 // Cek koneksi
 pool.getConnection()
   .then(conn => {
-    console.log('✓ MariaDB Connected');
+    console.log('✓ MySQL Connected');
     conn.release();
   })
   .catch(err => {
-    console.error('✗ MariaDB Connection Failed:', err);
+    console.error('✗ MySQL Connection Failed:', err);
     process.exit(1);
   });
 
-// ============ DB INIT (CREATE TABLE IF NOT EXISTS) ============
+/* ============================================================
+   AUTO DATABASE INIT
+   ============================================================ */
 async function initDatabase() {
   const conn = await pool.getConnection();
 
+  // Tabel PERAWAT
   await conn.query(`
     CREATE TABLE IF NOT EXISTS perawat (
       id_perawat VARCHAR(10) PRIMARY KEY,
@@ -47,6 +54,7 @@ async function initDatabase() {
     );
   `);
 
+  // Tabel PASIEN
   await conn.query(`
     CREATE TABLE IF NOT EXISTS pasien (
       id_pasien VARCHAR(10) PRIMARY KEY,
@@ -57,6 +65,7 @@ async function initDatabase() {
     );
   `);
 
+  // Tabel PENGUKURAN
   await conn.query(`
     CREATE TABLE IF NOT EXISTS pengukuran (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,9 +79,9 @@ async function initDatabase() {
     );
   `);
 
-  // Dummy Data Perawat
-  const [countPerawat] = await conn.query(`SELECT COUNT(*) AS c FROM perawat`);
-  if (countPerawat[0].c === 0) {
+  // Dummy data perawat
+  const [perawat] = await conn.query(`SELECT COUNT(*) AS c FROM perawat`);
+  if (perawat[0].c === 0) {
     const hash = p => crypto.createHash('sha256').update(p).digest('hex');
     await conn.query(`
       INSERT INTO perawat (id_perawat, nama, password) VALUES
@@ -82,9 +91,9 @@ async function initDatabase() {
     `);
   }
 
-  // Dummy Data Pasien
-  const [countPasien] = await conn.query(`SELECT COUNT(*) AS c FROM pasien`);
-  if (countPasien[0].c === 0) {
+  // Dummy data pasien
+  const [pasien] = await conn.query(`SELECT COUNT(*) AS c FROM pasien`);
+  if (pasien[0].c === 0) {
     await conn.query(`
       INSERT INTO pasien (id_pasien, nama, alamat, tanggal_lahir) VALUES
       ('PAT001','Budi Santoso','Jl. Merdeka No.10','1980-05-15'),
@@ -99,28 +108,33 @@ async function initDatabase() {
 }
 initDatabase();
 
-// ============ MIDDLEWARE SETUP ============
+/* ============================================================
+   EXPRESS & SESSION SETUP
+   ============================================================ */
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Session
 app.use(session({
   secret: 'darsinurse-secret-key-2025',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, secure: true }
+  cookie: { httpOnly: true, secure: false }  // secure:false untuk http
 }));
 
-// ============ AUTH MIDDLEWARE ============
+/* ============================================================
+   AUTH MIDDLEWARE
+   ============================================================ */
 const requireLogin = (req, res, next) => {
   if (!req.session.id_perawat) return res.redirect('/');
   next();
 };
 
-// ============ ROUTES ============
+/* ============================================================
+   ROUTES
+   ============================================================ */
 
 // LOGIN PAGE
 app.get('/', (req, res) => {
@@ -146,7 +160,7 @@ app.post('/login', async (req, res) => {
     return res.redirect('/dashboard');
   }
 
-  res.render('login', { error: 'ID Perawat atau Password salah!' });
+  return res.render('login', { error: 'ID Perawat atau Password salah!' });
 });
 
 // DASHBOARD
@@ -157,10 +171,9 @@ app.get('/dashboard', requireLogin, (req, res) => {
   });
 });
 
-// API SIMPAN DATA
+// SIMPAN DATA PENGUKURAN
 app.post('/simpan_data', requireLogin, async (req, res) => {
   const { id_pasien, tipe_device, data } = req.body;
-
   if (!id_pasien || !tipe_device || !data)
     return res.status(400).json({ error: 'Data tidak lengkap' });
 
@@ -179,7 +192,7 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
   });
 });
 
-// API RIWAYAT PASIEN
+// RIWAYAT PENGUKURAN PASIEN
 app.get('/riwayat/:id', requireLogin, async (req, res) => {
   const conn = await pool.getConnection();
   const [rows] = await conn.query(
@@ -190,10 +203,11 @@ app.get('/riwayat/:id', requireLogin, async (req, res) => {
     [req.params.id]
   );
   conn.release();
+
   res.json({ success: true, data: rows });
 });
 
-// API VALIDASI PASIEN
+// VALIDASI PASIEN
 app.get('/validasi_pasien/:id', requireLogin, async (req, res) => {
   const conn = await pool.getConnection();
   const [rows] = await conn.query(
@@ -201,6 +215,7 @@ app.get('/validasi_pasien/:id', requireLogin, async (req, res) => {
     [req.params.id]
   );
   conn.release();
+
   res.json({ valid: rows.length > 0, pasien: rows[0] || null });
 });
 
@@ -210,14 +225,14 @@ app.get('/logout', (req, res) => {
   res.redirect('/');
 });
 
-// ============ HTTPS SERVER ============
-const http = require('http');
-
+/* ============================================================
+   START HTTP SERVER
+   ============================================================ */
 http.createServer(app).listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
-║   DARSINURSE GATEWAY (MariaDB + HTTPS) ║
-║   http://localhost:${PORT}             ║
+║      DARSINURSE GATEWAY - MySQL        ║
+║   Server running on http://localhost:${PORT}  ║
 ╚════════════════════════════════════════╝
 `);
 });
