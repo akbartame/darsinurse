@@ -1,0 +1,139 @@
+#!/bin/bash
+# ============================================
+# DARSINURSE GATEWAY - QUICK START
+# Copy & Paste Step-by-Step
+# ============================================
+
+echo "╔════════════════════════════════════════════════════════════╗"
+echo "║  DARSINURSE GATEWAY - QUICK START SETUP                    ║"
+echo "╚════════════════════════════════════════════════════════════╝"
+echo ""
+
+# STEP 1: Create directory structure
+echo "[1/5] Membuat struktur folder..."
+mkdir -p darsinurse-gateway
+cd darsinurse-gateway
+mkdir -p views public
+
+echo "✓ Folder created"
+echo ""
+
+# STEP 2: Initialize package.json
+echo "[2/5] Setup package.json..."
+npm init -y > /dev/null 2>&1
+
+cat > package.json << 'EOF'
+{
+  "name": "darsinurse-gateway",
+  "version": "1.0.0",
+  "description": "Medical IoT Gateway dengan Web Bluetooth API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["medical", "iot", "bluetooth", "healthcare"],
+  "author": "Darsinurse Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "ejs": "^3.1.9",
+    "body-parser": "^1.20.2",
+    "better-sqlite3": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+EOF
+
+echo "✓ package.json ready"
+echo ""
+
+# STEP 3: Install dependencies
+echo "[3/5] Installing dependencies..."
+echo "  (ini mungkin memakan waktu 1-3 menit...)"
+npm install --legacy-peer-deps
+
+echo ""
+echo "✓ Dependencies installed"
+echo ""
+
+# STEP 4: Recap file yang harus dicopy
+echo "[4/5] File yang harus dicopy ke folder:"
+echo "========================================="
+echo ""
+echo "✓ server.js              → Root folder"
+echo "✓ views/login.ejs        → Folder views/"
+echo "✓ views/dashboard.ejs    → Folder views/"
+echo "✓ public/style.css       → Folder public/"
+echo "✓ public/script.js       → Folder public/"
+echo ""
+echo "⚠ CATATAN: Semua file sudah disediakan dalam artifacts di atas"
+echo "           Copy-paste ke folder yang sesuai"
+echo ""
+
+# STEP 5: Ready to run
+echo "[5/5] Siap untuk menjalankan!"
+echo "========================================="
+echo ""
+echo "🚀 Untuk menjalankan server:"
+echo ""
+echo "   $ npm start"
+echo ""
+echo "  Output yang diharapkan:"
+echo "  ╔════════════════════════════════════════╗"
+echo "  ║  DARSINURSE GATEWAY - RUNNING          ║"
+echo "  ║  Server: http://localhost:3000         ║"
+echo "  ║  Database: darsinurse.db               ║"
+echo "  ╚════════════════════════════════════════╝"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "AKSES APLIKASI:"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "🌐 URL: http://localhost:3000"
+echo ""
+echo "📋 LOGIN CREDENTIALS (Demo):"
+echo "   ID Perawat: P001"
+echo "   Password:   pass123"
+echo ""
+echo "👥 Pasien untuk testing:"
+echo "   PAT001 - Budi Santoso"
+echo "   PAT002 - Susi Handini"
+echo "   PAT003 - Rudi Hermawan"
+echo "   PAT004 - Ani Wijaya"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "DEBUGGING & LOGS:"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "📊 View database records (SQLite):"
+echo "   $ sqlite3 darsinurse.db"
+echo "   > SELECT * FROM pengukuran;"
+echo ""
+echo "📝 Browser console:"
+echo "   Buka di aplikasi → F12 → Console Tab"
+echo "   Lihat activity log di dashboard"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "FILE STRUCTURE FINAL:"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""
+echo "darsinurse-gateway/"
+echo "├── server.js                    ← Express backend"
+echo "├── package.json                 ← Dependencies"
+echo "├── darsinurse.db                ← SQLite (auto-created)"
+echo "├── node_modules/                ← Installed packages"
+echo "├── views/"
+echo "│   ├── login.ejs                ← Login page"
+echo "│   └── dashboard.ejs            ← Main dashboard"
+echo "└── public/"
+echo "    ├── style.css                ← Styling"
+echo "    └── script.js                ← Web Bluetooth logic"
+echo ""
+echo "═══════════════════════════════════════════════════════════════"
+echo "NEXT: Copy file-file dari artifacts, lalu jalankan npm start"
+echo "═══════════════════════════════════════════════════════════════"
+echo ""

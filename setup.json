@@ -1,0 +1,68 @@
+#!/bin/bash
+# ============================================
+# DARSINURSE GATEWAY - SETUP & RUN
+# ============================================
+
+# STEP 1: Create project structure
+mkdir -p darsinurse-gateway
+cd darsinurse-gateway
+
+mkdir -p views
+mkdir -p public
+
+# STEP 2: Create package.json
+cat > package.json << 'EOF'
+{
+  "name": "darsinurse-gateway",
+  "version": "1.0.0",
+  "description": "Medical IoT Gateway dengan Web Bluetooth API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["medical", "iot", "bluetooth", "healthcare"],
+  "author": "Darsinurse Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "ejs": "^3.1.9",
+    "body-parser": "^1.20.2",
+    "better-sqlite3": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
+EOF
+
+# STEP 3: Install dependencies
+echo "📦 Installing dependencies..."
+npm install
+
+echo ""
+echo "✅ Setup selesai!"
+echo ""
+echo "════════════════════════════════════════════════════════"
+echo "NEXT STEPS:"
+echo "════════════════════════════════════════════════════════"
+echo ""
+echo "1. Copy file-file berikut ke folder:"
+echo "   ✓ server.js (root folder)"
+echo "   ✓ views/login.ejs"
+echo "   ✓ views/dashboard.ejs"
+echo "   ✓ public/style.css"
+echo "   ✓ public/script.js"
+echo ""
+echo "2. Jalankan server:"
+echo "   npm start"
+echo ""
+echo "3. Buka browser:"
+echo "   http://localhost:3000"
+echo ""
+echo "4. Login dengan akun demo:"
+echo "   ID: P001"
+echo "   Password: pass123"
+echo ""
+echo "════════════════════════════════════════════════════════"

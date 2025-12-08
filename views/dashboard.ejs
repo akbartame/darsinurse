@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darsinurse Gateway - Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+:root {
+  --primary-blue: #0056b3;
+  --secondary-teal: #20c997;
+  --primary-dark: #003d7a;
+  --light-bg: #f0f8f7;
+  --dark-text: #1a3a3a;
+  --gray-border: #e0e0e0;
+  --success-green: #28a745;
+  --danger-red: #dc3545;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--dark-text);
+  background: #f5f5f5;
+}
+
+.navbar {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(90deg, var(--primary-blue), var(--secondary-teal)) !important;
+  padding: 1rem 0;
+}
+
+.navbar-brand {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.navbar-brand i {
+  margin-right: 8px;
+  color: #fff;
+}
+
+.navbar-text {
+  font-size: 14px;
+}
+
+.card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  margin-bottom: 20px;
+}
+
+.card:hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
+  border-bottom: 2px solid var(--gray-border);
+  background: linear-gradient(135deg, var(--primary-blue), var(--secondary-teal));
+  color: white;
+  font-weight: 600;
+  padding: 15px 20px;
+}
+
+.card-header i {
+  margin-right: 8px;
+}
+
+.measurement-card {
+  display: none;
+  animation: slideIn 0.3s ease;
+}
+
+.measurement-card.active {
+  display: block;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.selection-card {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: center;
+  padding: 30px 20px;
+}
+
+.selection-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.selection-card i {
+  font-size: 48px;
+  color: var(--secondary-teal);
+  margin-bottom: 15px;
+}
+
+.selection-card h5 {
+  margin: 0;
+  color: var(--dark-text);
+  font-weight: 600;
+}
+
+.form-label {
+  font-weight: 600;
+  color: var(--dark-text);
+  margin-bottom: 8px;
+}
+
+.form-control {
+  border: 2px solid var(--gray-border);
+  border-radius: 8px;
+  padding: 10px 15px;
+  transition: all 0.3s ease;
+}
+
+.form-control:focus {
+  border-color: var(--secondary-teal);
+  box-shadow: 0 0 0 0.2rem rgba(32, 201, 151, 0.15);
+  outline: none;
+}
+
+.form-control:disabled {
+  background: #f9f9f9;
+  cursor: not-allowed;
+}
+
+.btn {
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  border: none;
+  padding: 10px 20px;
+}
+
+.btn-primary {
+  background: var(--primary-blue);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 86, 179, 0.3);
+}
+
+.btn-success {
+  background: var(--success-green);
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #218838;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+}
+
+.btn-danger {
+  background: var(--danger-red);
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c82333;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(220, 53, 69, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-back {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-back:hover {
+  background: #5a6268;
+}
+
+.alert {
+  border-radius: 8px;
+  border: none;
+  padding: 12px 15px;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.alert-info {
+  background: #e7f3ff;
+  color: var(--primary-blue);
+  border-left: 4px solid var(--primary-blue);
+}
+
+.alert-success {
+  background: #e6f9e6;
+  color: #28a745;
+  border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+  background: #ffe6e6;
+  color: #dc3545;
+  border-left: 4px solid #dc3545;
+}
+
+.alert-warning {
+  background: #fff3cd;
+  color: #856404;
+  border-left: 4px solid #ffc107;
+}
+
+.measurement-display {
+  background: linear-gradient(135deg, #f0f8f7, white);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  margin: 15px 0;
+  border: 2px solid var(--secondary-teal);
+}
+
+.measurement-display h3 {
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--secondary-teal);
+  margin: 10px 0;
+}
+
+.measurement-display small {
+  color: #666;
+  font-size: 14px;
+}
+
+.patient-info {
+  background: #e6f9e6;
+  border-left: 4px solid #28a745;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.patient-info strong {
+  color: #28a745;
+}
+
+#activity-log {
+  background: #f9f9f9;
+  border-radius: 6px;
+  padding: 15px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 12px;
+  font-family: monospace;
+  border-left: 3px solid var(--secondary-teal);
+}
+
+.log-time {
+  color: var(--secondary-teal);
+  font-weight: 600;
+}
+
+.log-success {
+  color: var(--success-green);
+}
+
+.log-error {
+  color: var(--danger-red);
+}
+
+@media (max-width: 768px) {
+  .navbar-brand {
+    font-size: 18px;
+  }
+  
+  .card-header {
+    font-size: 14px;
+    padding: 12px 15px;
+  }
+  
+  .measurement-display h3 {
+    font-size: 32px;
+  }
+  
+  .selection-card i {
+    font-size: 36px;
+  }
+}
+  </style>
+</head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="navbar navbar-dark sticky-top">
+    <div class="container-fluid">
+      <span class="navbar-brand mb-0 h1">
+        <i class="fas fa-heartbeat"></i> Darsinurse Gateway
+      </span>
+      <div class="navbar-text text-white">
+        <span id="nurse-name"><%= nama_perawat || 'Perawat' %></span> |
+        <a href="/logout" class="text-white text-decoration-none ms-2" onclick="return confirm('Yakin logout?')">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid py-4">
+    <div class="row">
+      <!-- KOLOM KIRI: PILIHAN & FORMULIR -->
+      <div class="col-lg-8">
+        <!-- SELECTION MENU -->
+        <div id="selection-menu">
+          <div class="row">
+            <div class="col-12 mb-3">
+              <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Pilih jenis pengukuran yang ingin dilakukan
+              </div>
+            </div>
+            
+            <div class="col-md-6 col-lg-3 mb-3">
+              <div class="card selection-card" onclick="showMeasurement('glucose')">
+                <div class="card-body">
+                  <i class="fas fa-droplet"></i>
+                  <h5>Glukosa</h5>
+                  <small class="text-muted">Gula Darah</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3 mb-3">
+              <div class="card selection-card" onclick="showMeasurement('bp')">
+                <div class="card-body">
+                  <i class="fas fa-heart-pulse"></i>
+                  <h5>Tekanan Darah</h5>
+                  <small class="text-muted">Blood Pressure</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3 mb-3">
+              <div class="card selection-card" onclick="showMeasurement('hr')">
+                <div class="card-body">
+                  <i class="fas fa-heart"></i>
+                  <h5>Detak Jantung</h5>
+                  <small class="text-muted">Heart Rate</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6 col-lg-3 mb-3">
+              <div class="card selection-card" onclick="showMeasurement('weight')">
+                <div class="card-body">
+                  <i class="fas fa-weight-scale"></i>
+                  <h5>Berat & BMI</h5>
+                  <small class="text-muted">Weight & BMI</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GLUCOSE MEASUREMENT -->
+        <div id="card-glucose" class="measurement-card">
+          <div class="card">
+            <div class="card-header">
+              <i class="fas fa-droplet"></i> Pengukuran Glukosa
+            </div>
+            <div class="card-body">
+              <form id="form-glucose">
+                <div class="mb-3">
+                  <label class="form-label">ID Perawat</label>
+                  <input type="text" class="form-control" id="glucose-id-perawat" value="<%= id_perawat %>" disabled>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">ID Pasien</label>
+                  <input type="text" class="form-control" id="glucose-id-pasien" placeholder="Contoh: PAT001" required>
+                  <div id="glucose-patient-info"></div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Nilai Glukosa (mg/dL)</label>
+                  <div class="measurement-display">
+                    <small>Nilai Glukosa</small>
+                    <h3 id="glucose-value">-</h3>
+                    <small>mg/dL</small>
+                  </div>
+                </div>
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-primary" id="btn-scan-glucose">
+                    <i class="fas fa-bluetooth"></i> Scan Glukometer
+                  </button>
+                  <button type="submit" class="btn btn-success" id="btn-save-glucose" disabled>
+                    <i class="fas fa-save"></i> Simpan Data Glukosa
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm" id="btn-stop-glucose" disabled>
+                    <i class="fas fa-stop"></i> Stop Koneksi
+                  </button>
+                  <button type="button" class="btn btn-back" onclick="backToMenu()">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Menu
+                  </button>
+                </div>
+                <div id="glucose-status" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- BP MEASUREMENT -->
+        <div id="card-bp" class="measurement-card">
+          <div class="card">
+            <div class="card-header">
+              <i class="fas fa-heart-pulse"></i> Pengukuran Tekanan Darah
+            </div>
+            <div class="card-body">
+              <form id="form-bp">
+                <div class="mb-3">
+                  <label class="form-label">ID Perawat</label>
+                  <input type="text" class="form-control" id="bp-id-perawat" value="<%= id_perawat %>" disabled>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">ID Pasien</label>
+                  <input type="text" class="form-control" id="bp-id-pasien" placeholder="Contoh: PAT001" required>
+                  <div id="bp-patient-info"></div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Tekanan Darah (mmHg)</label>
+                  <div class="measurement-display">
+                    <small>Systolic / Diastolic</small>
+                    <h3 id="bp-value">-</h3>
+                    <small>mmHg</small>
+                  </div>
+                </div>
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-primary" id="btn-scan-bp">
+                    <i class="fas fa-bluetooth"></i> Scan Tensimeter
+                  </button>
+                  <button type="submit" class="btn btn-success" id="btn-save-bp" disabled>
+                    <i class="fas fa-save"></i> Simpan Data Tensi
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm" id="btn-stop-bp" disabled>
+                    <i class="fas fa-stop"></i> Stop Koneksi
+                  </button>
+                  <button type="button" class="btn btn-back" onclick="backToMenu()">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Menu
+                  </button>
+                </div>
+                <div id="bp-status" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- HR MEASUREMENT -->
+        <div id="card-hr" class="measurement-card">
+          <div class="card">
+            <div class="card-header">
+              <i class="fas fa-heart"></i> Pengukuran Detak Jantung
+            </div>
+            <div class="card-body">
+              <form id="form-hr">
+                <div class="mb-3">
+                  <label class="form-label">ID Perawat</label>
+                  <input type="text" class="form-control" id="hr-id-perawat" value="<%= id_perawat %>" disabled>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">ID Pasien</label>
+                  <input type="text" class="form-control" id="hr-id-pasien" placeholder="Contoh: PAT001" required>
+                  <div id="hr-patient-info"></div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Detak Jantung (bpm)</label>
+                  <div class="measurement-display">
+                    <small>Heart Rate</small>
+                    <h3 id="hr-value">-</h3>
+                    <small>bpm</small>
+                  </div>
+                </div>
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-primary" id="btn-scan-hr">
+                    <i class="fas fa-bluetooth"></i> Scan Heart Rate Monitor
+                  </button>
+                  <button type="submit" class="btn btn-success" id="btn-save-hr" disabled>
+                    <i class="fas fa-save"></i> Simpan Data Heart Rate
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm" id="btn-stop-hr" disabled>
+                    <i class="fas fa-stop"></i> Stop Koneksi
+                  </button>
+                  <button type="button" class="btn btn-back" onclick="backToMenu()">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Menu
+                  </button>
+                </div>
+                <div id="hr-status" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- WEIGHT MEASUREMENT -->
+        <div id="card-weight" class="measurement-card">
+          <div class="card">
+            <div class="card-header">
+              <i class="fas fa-weight-scale"></i> Pengukuran Berat & BMI
+            </div>
+            <div class="card-body">
+              <form id="form-weight">
+                <div class="mb-3">
+                  <label class="form-label">ID Perawat</label>
+                  <input type="text" class="form-control" id="weight-id-perawat" value="<%= id_perawat %>" disabled>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">ID Pasien</label>
+                  <input type="text" class="form-control" id="weight-id-pasien" placeholder="Contoh: PAT001" required>
+                  <div id="weight-patient-info"></div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Tinggi Badan (cm)</label>
+                  <input type="number" class="form-control" id="weight-height" placeholder="Contoh: 170" min="50" max="250" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Berat Badan (kg)</label>
+                  <div class="measurement-display">
+                    <small>Berat Badan</small>
+                    <h3 id="weight-value">-</h3>
+                    <small>kg</small>
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">BMI (Body Mass Index)</label>
+                  <div class="measurement-display">
+                    <small>BMI</small>
+                    <h3 id="bmi-value">-</h3>
+                    <small id="bmi-category"></small>
+                  </div>
+                </div>
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-primary" id="btn-scan-weight">
+                    <i class="fas fa-bluetooth"></i> Scan Timbangan
+                  </button>
+                  <button type="submit" class="btn btn-success" id="btn-save-weight" disabled>
+                    <i class="fas fa-save"></i> Simpan Data Berat & BMI
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm" id="btn-stop-weight" disabled>
+                    <i class="fas fa-stop"></i> Stop Koneksi
+                  </button>
+                  <button type="button" class="btn btn-back" onclick="backToMenu()">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Menu
+                  </button>
+                </div>
+                <div id="weight-status" class="mt-3"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KOLOM KANAN: LOG AKTIVITAS -->
+      <div class="col-lg-4">
+        <div class="card">
+          <div class="card-header">
+            <i class="fas fa-list"></i> Log Aktivitas
+          </div>
+          <div class="card-body">
+            <div id="activity-log">
+              <small class="text-muted">Aktivitas akan muncul di sini...</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // DARSINURSE GATEWAY - Web Bluetooth Implementation
+    // ============================================
+
+    // ==== UUID STANDAR GATT ====
+    const BLOOD_PRESSURE_SERVICE = 0x1810;
+    const HEART_RATE_SERVICE = 0x180D;
+    const WEIGHT_SCALE_SERVICE = 0x181D;
+    const GLUCOSE_SERVICE = 0x1808;
+
+    const BP_MEASUREMENT_CHAR = 0x2A35;
+    const HR_MEASUREMENT_CHAR = 0x2A37;
+    const WEIGHT_MEASUREMENT_CHAR = 0x2A9D;
+    const GLUCOSE_MEASUREMENT_CHAR = 0x2A18;
+
+    // ==== STATE ====
+    const activityLog = document.getElementById('activity-log');
+    const idPerawat = '<%= id_perawat %>';
+    
+    let currentDevices = {
+      glucose: null,
+      bp: null,
+      hr: null,
+      weight: null
+    };
+
+    let measurementData = {
+      glucose: null,
+      bp: null,
+      hr: null,
+      weight: null,
+      height: null,
+      bmi: null
+    };
+
+    let currentPatients = {
+      glucose: null,
+      bp: null,
+      hr: null,
+      weight: null
+    };
+
+    // ==== SHOW MEASUREMENT FORM ====
+    function showMeasurement(type) {
+      document.getElementById('selection-menu').style.display = 'none';
+      document.querySelectorAll('.measurement-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      document.getElementById(`card-${type}`).classList.add('active');
+      addLog(`Formulir ${getMeasurementName(type)} dibuka`, 'success');
+    }
+
+    // ==== BACK TO MENU ====
+    function backToMenu() {
+      document.getElementById('selection-menu').style.display = 'block';
+      document.querySelectorAll('.measurement-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      addLog('Kembali ke menu pilihan', 'info');
+    }
+
+    // ==== GET MEASUREMENT NAME ====
+    function getMeasurementName(type) {
+      const names = {
+        glucose: 'Glukosa',
+        bp: 'Tekanan Darah',
+        hr: 'Detak Jantung',
+        weight: 'Berat & BMI'
+      };
+      return names[type] || type;
+    }
+
+    // ==== LOGGING FUNCTION ====
+    function addLog(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString('id-ID');
+      const logClass = type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : '';
+      const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : '→';
+      
+      const logEntry = document.createElement('div');
+      logEntry.innerHTML = `<span class="log-time">[${timestamp}]</span> <span class="${logClass}">${icon} ${message}</span>`;
+      
+      activityLog.insertBefore(logEntry, activityLog.firstChild);
+      
+      while (activityLog.children.length > 50) {
+        activityLog.removeChild(activityLog.lastChild);
+      }
+    }
+
+    // ==== VALIDATE PATIENT ====
+    async function validatePatient(idPasien, type) {
+      try {
+        const response = await fetch(`/validasi_pasien/${idPasien}`);
+        const result = await response.json();
+
+        const infoDiv = document.getElementById(`${type}-patient-info`);
+        
+        if (result.valid) {
+          currentPatients[type] = idPasien;
+          infoDiv.innerHTML = `<div class="patient-info mt-2">✓ <strong>${result.pasien.nama}</strong><br><small>${result.pasien.alamat}</small></div>`;
+          addLog(`Pasien ditemukan: ${result.pasien.nama}`, 'success');
+          return true;
+        } else {
+          infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Pasien tidak ditemukan</div>`;
+          addLog('Pasien tidak ditemukan', 'error');
+          return false;
+        }
+      } catch (err) {
+        const infoDiv = document.getElementById(`${type}-patient-info`);
+        infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Error: ${err.message}</div>`;
+        addLog('Error validasi: ' + err.message, 'error');
+        return false;
+      }
+    }
+
+    // ==== SEND DATA TO SERVER ====
+    async function sendToServer(tipe, idPasien, dataValue) {
+      try {
+        const response = await fetch('/simpan_data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id_perawat: idPerawat,
+            id_pasien: idPasien,
+            tipe_device: tipe,
+            data: dataValue
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          addLog(`${tipe} disimpan: ${dataValue}`, 'success');
+          return true;
+        } else {
+          addLog(`Error menyimpan: ${result.error}`, 'error');
+          return false;
+        }
+      } catch (err) {
+        addLog(`Network error: ${err.message}`, 'error');
+        return false;
+      }
+    }
+
+    // ==== PARSE SFLOAT ====
+    function parseSFLOAT(bytes) {
+      if (bytes.length < 2) return null;
+      const mantissa = bytes[0] | (bytes[1] << 8) | ((bytes[2] & 0x0F) << 16);
+      const exponent = ((bytes[2] & 0xF0) >> 4);
+      if (exponent === 0xF) return null;
+      const exp = exponent > 7 ? exponent - 16 : exponent;
+      return mantissa * Math.pow(10, exp);
+    }
+
+    // ==== GLUCOSE HANDLER ====
+    function handleGlucose(event) {
+      try {
+        const value = event.target.value;
+        const bytes = new Uint8Array(value.buffer);
+        let glucoseValue = null;
+
+        if (bytes.length >= 4) {
+          const glucoseBytes = [bytes[1], bytes[2], bytes[3]];
+          glucoseValue = parseSFLOAT(glucoseBytes);
+        }
+
+        if (glucoseValue !== null) {
+          glucoseValue = Math.round(glucoseValue * 10) / 10;
+          measurementData.glucose = glucoseValue;
+          document.getElementById('glucose-value').textContent = glucoseValue.toFixed(0);
+          document.getElementById('btn-save-glucose').disabled = false;
+          addLog(`Glukosa terukur: ${glucoseValue} mg/dL`, 'success');
+          showStatus('glucose', `✓ Glukosa terukur: ${glucoseValue} mg/dL`, 'success');
+        }
+      } catch (err) {
+        addLog(`Error parsing glukosa: ${err.message}`, 'error');
+      }
+    }
+
+    // ==== BP HANDLER ====
+    function handleBP(event) {
+      try {
+        const value = event.target.value;
+        const bytes = new Uint8Array(value.buffer);
+
+        if (bytes.length >= 5) {
+          const systolic = bytes[1] | (bytes[2] << 8);
+          const diastolic = bytes[3] | (bytes[4] << 8);
+          const bpValue = `${systolic}/${diastolic}`;
+          
+          measurementData.bp = bpValue;
+          document.getElementById('bp-value').textContent = bpValue;
+          document.getElementById('btn-save-bp').disabled = false;
+          addLog(`Tensi terukur: ${bpValue} mmHg`, 'success');
+          showStatus('bp', `✓ Tensi terukur: ${bpValue} mmHg`, 'success');
+        }
+      } catch (err) {
+        addLog(`Error parsing tensi: ${err.message}`, 'error');
+      }
+    }
+
+    // ==== HR HANDLER ====
+    function handleHR(event) {
+      try {
+        const value = event.target.value;
+        const bytes = new Uint8Array(value.buffer);
+        let hrValue = null;
+        const flags = bytes[0];
+
+        if ((flags & 0x01) === 0) {
+          hrValue = bytes[1];
+        } else {
+          hrValue = bytes[1] | (bytes[2] << 8);
+        }
+
+        if (hrValue !== null) {
+          measurementData.hr = hrValue;
+          document.getElementById('hr-value').textContent = hrValue;
+          document.getElementById('btn-save-hr').disabled = false;
+          addLog(`Heart Rate terukur: ${hrValue} bpm`, 'success');
+          showStatus('hr', `✓ Heart Rate terukur: ${hrValue} bpm`, 'success');
+        }
+      } catch (err) {
+        addLog(`Error parsing heart rate: ${err.message}`, 'error');
+      }
+    }
+
+    // ==== WEIGHT HANDLER ====
+    function handleWeight(event) {
+      try {
+        const value = event.target.value;
+        const bytes = new Uint8Array(value.buffer);
+
+        if (bytes.length >= 3) {
+          const flags = bytes[0];
+          const weightRaw = bytes[1] | (bytes[2] << 8);
+          const divisor = (flags & 0x01) ? 100 : 200;
+          const weightValue = weightRaw / divisor;
+          const displayWeight = Math.round(weightValue * 10) / 10;
+          
+          measurementData.weight = displayWeight;
+          document.getElementById('weight-value').textContent = displayWeight.toFixed(1);
+          
+          const height = parseFloat(document.getElementById('weight-height').value);
+          if (height > 0) {
+            calculateBMI(displayWeight, height);
+          }
+          
+          document.getElementById('btn-save-weight').disabled = false;
+          addLog(`Berat Badan terukur: ${displayWeight} kg`, 'success');
+          showStatus('weight', `✓ Berat Badan terukur: ${displayWeight} kg`, 'success');
+        }
+      } catch (err) {
+        addLog(`Error parsing weight: ${err.message}`, 'error');
+      }
+    }
+
+    // ==== CALCULATE BMI ====
+    function calculateBMI(weight, heightCm) {
+      const heightM = heightCm / 100;
+      const bmi = weight / (heightM * heightM);
+      const bmiRounded = Math.round(bmi * 10) / 10;
+      
+      measurementData.bmi = bmiRounded;
+      measurementData.height = heightCm;
+      
+      document.getElementById('bmi-value').textContent = bmiRounded.toFixed(1);
+      
+      let category = '';
+      if (bmi < 18.5) category = 'Underweight';
+      else if (bmi < 25) category = 'Normal';
+      else if (bmi < 30) category = 'Overweight';
+      else category = 'Obese';
+      
+      document.getElementById('bmi-category').textContent = category;
+      addLog(`BMI dihitung: ${bmiRounded.toFixed(1)} (${category})`, 'success');
+    }
+
+    // ==== SHOW STATUS ====
+    function showStatus(type, message, alertType = 'info') {
+      const statusDiv = document.getElementById(`${type}-status`);
+      statusDiv.innerHTML = `<div class="alert alert-${alertType}">${message}</div>`;
+    }
+
+    // ==== STOP CONNECTION ====
+    function stopConnection(type) {
+      if (currentDevices[type] && currentDevices[type].gatt.connected) {
+        currentDevices[type].gatt.disconnect();
+        currentDevices[type] = null;
+        document.getElementById(`btn-scan-${type}`).disabled = false;
+        document.getElementById(`btn-stop-${type}`).disabled = true;
+        addLog(`Koneksi ${getMeasurementName(type)} dihentikan`, 'success');
+        showStatus(type, '✓ Koneksi dihentikan', 'success');
+      }
+    }
+
+    // ==== SCAN BLUETOOTH DEVICE ====
+    async function scanBLE(type, service, characteristic, handler) {
+      const idPasien = document.getElementById(`${type}-id-pasien`).value.trim();
+      if (!idPasien) {
+        alert('Masukkan ID Pasien terlebih dahulu');
+        return;
+      }
+
+      const valid = await validatePatient(idPasien, type);
+      if (!valid) return;
+
+      if (!navigator.bluetooth) {
+        alert('Browser tidak mendukung Web Bluetooth API!\nGunakan Chrome, Edge, atau Opera.');
+        return;
+      }
+
+      try {
+        showStatus(type, '🔍 Mencari perangkat...', 'info');
+        addLog(`Scanning ${getMeasurementName(type)}...`, 'info');
+        
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [service] }],
+          optionalServices: [service]
+        });
+
+        currentDevices[type] = device;
+        showStatus(type, `✓ Terhubung: ${device.name || 'Device'}`, 'success');
+        addLog(`Device ditemukan: ${device.name}`, 'success');
+
+        const server = await device.gatt.connect();
+        const bleService = await server.getPrimaryService(service);
+        const bleChar = await bleService.getCharacteristic(characteristic);
+        
+        await bleChar.startNotifications();
+        bleChar.addEventListener('characteristicvaluechanged', handler);
+        
+        document.getElementById(`btn-scan-${type}`).disabled = true;
+        document.getElementById(`btn-stop-${type}`).disabled = false;
+        
+        showStatus(type, '✓ Siap menerima data - lakukan pengukuran', 'success');
+        addLog(`${getMeasurementName(type)} siap menerima data`, 'success');
+
+      } catch (err) {
+        if (err.name === 'NotFoundError') {
+          showStatus(type, '✗ Perangkat tidak ditemukan', 'danger');
+          addLog('User membatalkan atau device tidak ditemukan', 'error');
+        } else {
+          showStatus(type, `✗ Error: ${err.message}`, 'danger');
+          addLog(`Scan error: ${err.message}`, 'error');
+        }
+      }
+    }
+
+    // ==== SETUP SCAN BUTTONS ====
+    document.getElementById('btn-scan-glucose').addEventListener('click', () => {
+      scanBLE('glucose', GLUCOSE_SERVICE, GLUCOSE_MEASUREMENT_CHAR, handleGlucose);
+    });
+
+    document.getElementById('btn-scan-bp').addEventListener('click', () => {
+      scanBLE('bp', BLOOD_PRESSURE_SERVICE, BP_MEASUREMENT_CHAR, handleBP);
+    });
+
+    document.getElementById('btn-scan-hr').addEventListener('click', () => {
+      scanBLE('hr', HEART_RATE_SERVICE, HR_MEASUREMENT_CHAR, handleHR);
+    });
+
+    document.getElementById('btn-scan-weight').addEventListener('click', () => {
+      scanBLE('weight', WEIGHT_SCALE_SERVICE, WEIGHT_MEASUREMENT_CHAR, handleWeight);
+    });
+
+    // ==== SETUP STOP BUTTONS ====
+    ['glucose', 'bp', 'hr', 'weight'].forEach(type => {
+      document.getElementById(`btn-stop-${type}`).addEventListener('click', () => {
+        stopConnection(type);
+      });
+    });
+
+    // ==== SETUP SAVE FORMS ====
+    document.getElementById('form-glucose').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const value = measurementData.glucose;
+      const idPasien = currentPatients.glucose;
+      if (value && idPasien) {
+        const success = await sendToServer('glukosa', idPasien, value.toString());
+        if (success) {
+          alert('Data Glukosa berhasil disimpan!');
+          setTimeout(() => {
+            backToMenu();
+            document.getElementById('glucose-value').textContent = '-';
+            document.getElementById('btn-save-glucose').disabled = true;
+            stopConnection('glucose');
+          }, 500);
+        }
+      }
+    });
+
+    document.getElementById('form-bp').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const value = measurementData.bp;
+      const idPasien = currentPatients.bp;
+      if (value && idPasien) {
+        const success = await sendToServer('tensimeter', idPasien, value);
+        if (success) {
+          alert('Data Tekanan Darah berhasil disimpan!');
+          setTimeout(() => {
+            backToMenu();
+            document.getElementById('bp-value').textContent = '-';
+            document.getElementById('btn-save-bp').disabled = true;
+            stopConnection('bp');
+          }, 500);
+        }
+      }
+    });
+
+    document.getElementById('form-hr').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const value = measurementData.hr;
+      const idPasien = currentPatients.hr;
+      if (value && idPasien) {
+        const success = await sendToServer('heart_rate', idPasien, value.toString());
+        if (success) {
+          alert('Data Heart Rate berhasil disimpan!');
+          setTimeout(() => {
+            backToMenu();
+            document.getElementById('hr-value').textContent = '-';
+            document.getElementById('btn-save-hr').disabled = true;
+            stopConnection('hr');
+          }, 500);
+        }
+      }
+    });
+
+    document.getElementById('form-weight').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const weight = measurementData.weight;
+      const bmi = measurementData.bmi;
+      const height = measurementData.height;
+      const idPasien = currentPatients.weight;
+      
+      if (weight && idPasien) {
+        const dataToSend = bmi ? `${weight}|BMI:${bmi}|Height:${height}` : weight.toString();
+        const success = await sendToServer('timbangan', idPasien, dataToSend);
+        if (success) {
+          alert('Data Berat & BMI berhasil disimpan!');
+          setTimeout(() => {
+            backToMenu();
+            document.getElementById('weight-value').textContent = '-';
+            document.getElementById('bmi-value').textContent = '-';
+            document.getElementById('btn-save-weight').disabled = true;
+            stopConnection('weight');
+          }, 500);
+        }
+      }
+    });
+
+    // ==== AUTO CALCULATE BMI ====
+    document.getElementById('weight-height').addEventListener('input', function() {
+      const height = parseFloat(this.value);
+      const weight = measurementData.weight;
+      if (height > 0 && weight > 0) {
+        calculateBMI(weight, height);
+      }
+    });
+
+    // ==== CHECK BROWSER SUPPORT ====
+    if (!navigator.bluetooth) {
+      addLog('⚠ Browser tidak mendukung Web Bluetooth API', 'error');
+      addLog('Gunakan Chrome, Edge, atau Opera', 'error');
+    } else {
+      addLog('✓ Browser mendukung Web Bluetooth API', 'success');
+    }
+
+    // ==== INITIALIZATION ====
+    addLog('Sistem Darsinurse Gateway siap digunakan', 'success');
+  </script>
+</body>
+</html>
