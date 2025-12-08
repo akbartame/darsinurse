@@ -6,11 +6,11 @@ services:
     build: .
     restart: always
     ports:
-      - "3000:3000"
+      - "4000:4000"
     environment:
       DB_HOST: mariadb
       DB_USER: root
-      DB_PASSWORD: mariadb123   # ➜ UBAH JIKA PERLU
+      DB_PASSWORD: mariadb123
       DB_NAME: darsinurse
     depends_on:
       - mariadb
@@ -22,7 +22,7 @@ services:
     image: mariadb:11
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: mariadb123   # ➜ UBAH JIKA PERLU
+      MYSQL_ROOT_PASSWORD: mariadb123
       MYSQL_DATABASE: darsinurse
       TZ: Asia/Jakarta
     ports:

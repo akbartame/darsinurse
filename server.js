@@ -9,11 +9,9 @@ const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const path = require('path');
 const crypto = require('crypto');
-const https = require('https');
-const fs = require('fs');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 4000;
 
 // ============ MARIADB CONNECTION POOL ============
 const pool = mysql.createPool({
@@ -213,16 +211,13 @@ app.get('/logout', (req, res) => {
 });
 
 // ============ HTTPS SERVER ============
-const httpsOptions = {
-  key: fs.readFileSync(path.join(__dirname, 'cert', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'cert', 'cert.pem'))
-};
+const http = require('http');
 
-https.createServer(httpsOptions, app).listen(PORT, () => {
+http.createServer(app).listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║   DARSINURSE GATEWAY (MariaDB + HTTPS) ║
-║   https://localhost:${PORT}             ║
+║   http://localhost:${PORT}             ║
 ╚════════════════════════════════════════╝
 `);
 });
