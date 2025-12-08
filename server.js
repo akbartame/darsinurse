@@ -21,12 +21,11 @@ const PORT = process.env.PORT || 4000;
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',   // <-- FIX DI SINI
+  password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'darsinurse',
   waitForConnections: true,
   connectionLimit: 10
 });
-
 
 // Cek koneksi
 pool.getConnection()
@@ -44,22 +43,14 @@ pool.getConnection()
    ============================================================ */
 async function initDatabase() {
   const conn = await pool.getConnection();
+  
+  // Tabel PERAWAT dengan role
   await conn.query(`
     CREATE TABLE IF NOT EXISTS perawat (
       id_perawat VARCHAR(10) PRIMARY KEY,
       nama VARCHAR(100),
       password VARCHAR(255),
       role ENUM('admin','perawat') DEFAULT 'perawat',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // Tabel PERAWAT
-  await conn.query(`
-    CREATE TABLE IF NOT EXISTS perawat (
-      id_perawat VARCHAR(10) PRIMARY KEY,
-      nama VARCHAR(100),
-      password VARCHAR(255),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -94,10 +85,11 @@ async function initDatabase() {
   if (perawat[0].c === 0) {
     const hash = p => crypto.createHash('sha256').update(p).digest('hex');
     await conn.query(`
-      INSERT INTO perawat (id_perawat, nama, password) VALUES
-      ('P001','Siti Nurhaliza','${hash('pass123')}'),
-      ('P002','Ahmad Wijaya','${hash('pass456')}'),
-      ('P003','Dewi Lestari','${hash('pass789')}')
+      INSERT INTO perawat (id_perawat, nama, password, role) VALUES
+      ('ADMIN01','Administrator','${hash('admin123')}','admin'),
+      ('P001','Siti Nurhaliza','${hash('pass123')}','perawat'),
+      ('P002','Ahmad Wijaya','${hash('pass456')}','perawat'),
+      ('P003','Dewi Lestari','${hash('pass789')}','perawat')
     `);
   }
 
@@ -131,7 +123,7 @@ app.use(session({
   secret: 'darsinurse-secret-key-2025',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, secure: false }  // secure:false untuk http
+  cookie: { httpOnly: true, secure: false }
 }));
 
 /* ============================================================
@@ -142,13 +134,26 @@ const requireLogin = (req, res, next) => {
   next();
 };
 
+const requireAdmin = (req, res, next) => {
+  if (!req.session.id_perawat) return res.redirect('/');
+  if (req.session.role !== 'admin') {
+    return res.status(403).send('Access Denied: Admin only');
+  }
+  next();
+};
+
 /* ============================================================
    ROUTES
    ============================================================ */
 
 // LOGIN PAGE
 app.get('/', (req, res) => {
-  if (req.session.id_perawat) return res.redirect('/dashboard');
+  if (req.session.id_perawat) {
+    if (req.session.role === 'admin') {
+      return res.redirect('/admin/manage-users');
+    }
+    return res.redirect('/dashboard');
+  }
   res.render('login', { error: null });
 });
 
@@ -167,19 +172,137 @@ app.post('/login', async (req, res) => {
   if (rows.length && rows[0].password === hash) {
     req.session.id_perawat = rows[0].id_perawat;
     req.session.nama_perawat = rows[0].nama;
+    req.session.role = rows[0].role;
+    
+    // Redirect berdasarkan role
+    if (rows[0].role === 'admin') {
+      return res.redirect('/admin/manage-users');
+    }
     return res.redirect('/dashboard');
   }
 
   return res.render('login', { error: 'ID Perawat atau Password salah!' });
 });
 
-// DASHBOARD
+// DASHBOARD (Hanya untuk perawat)
 app.get('/dashboard', requireLogin, (req, res) => {
+  if (req.session.role === 'admin') {
+    return res.redirect('/admin/manage-users');
+  }
   res.render('dashboard', {
     nama_perawat: req.session.nama_perawat,
     id_perawat: req.session.id_perawat
   });
 });
+
+// ========== ADMIN ROUTES ==========
+
+// MANAGE USERS PAGE
+app.get('/admin/manage-users', requireAdmin, async (req, res) => {
+  const conn = await pool.getConnection();
+  const [users] = await conn.query(
+    'SELECT id_perawat, nama, role, created_at FROM perawat ORDER BY created_at DESC'
+  );
+  conn.release();
+
+  res.render('admin-users', {
+    nama_perawat: req.session.nama_perawat,
+    id_perawat: req.session.id_perawat,
+    users: users
+  });
+});
+
+// GET ALL USERS (API)
+app.get('/admin/api/users', requireAdmin, async (req, res) => {
+  const conn = await pool.getConnection();
+  const [users] = await conn.query(
+    'SELECT id_perawat, nama, role, created_at FROM perawat ORDER BY created_at DESC'
+  );
+  conn.release();
+  res.json({ success: true, users });
+});
+
+// ADD NEW USER
+app.post('/admin/api/users', requireAdmin, async (req, res) => {
+  const { id_perawat, nama, password, role } = req.body;
+  
+  if (!id_perawat || !nama || !password || !role) {
+    return res.status(400).json({ error: 'Semua field harus diisi' });
+  }
+
+  const hash = crypto.createHash('sha256').update(password).digest('hex');
+  
+  try {
+    const conn = await pool.getConnection();
+    await conn.query(
+      'INSERT INTO perawat (id_perawat, nama, password, role) VALUES (?, ?, ?, ?)',
+      [id_perawat, nama, hash, role]
+    );
+    conn.release();
+    
+    res.json({ success: true, message: 'User berhasil ditambahkan' });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: 'ID Perawat sudah terdaftar' });
+    } else {
+      res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+  }
+});
+
+// UPDATE USER
+app.put('/admin/api/users/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { nama, password, role } = req.body;
+  
+  if (!nama || !role) {
+    return res.status(400).json({ error: 'Nama dan role harus diisi' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+    
+    if (password && password.trim() !== '') {
+      const hash = crypto.createHash('sha256').update(password).digest('hex');
+      await conn.query(
+        'UPDATE perawat SET nama = ?, password = ?, role = ? WHERE id_perawat = ?',
+        [nama, hash, role, id]
+      );
+    } else {
+      await conn.query(
+        'UPDATE perawat SET nama = ?, role = ? WHERE id_perawat = ?',
+        [nama, role, id]
+      );
+    }
+    
+    conn.release();
+    res.json({ success: true, message: 'User berhasil diupdate' });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// DELETE USER
+app.delete('/admin/api/users/:id', requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  
+  // Prevent deleting own account
+  if (id === req.session.id_perawat) {
+    return res.status(400).json({ error: 'Tidak bisa menghapus akun sendiri' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+    await conn.query('DELETE FROM perawat WHERE id_perawat = ?', [id]);
+    conn.release();
+    
+    res.json({ success: true, message: 'User berhasil dihapus' });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// ========== PERAWAT ROUTES ==========
 
 // SIMPAN DATA PENGUKURAN
 app.post('/simpan_data', requireLogin, async (req, res) => {
