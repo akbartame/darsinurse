@@ -8,6 +8,8 @@ services:
       MYSQL_DATABASE: darsinurse
       MYSQL_USER: darsinurse
       MYSQL_PASSWORD: darsinurse123
+      MB_TIMEZONE: "Asia/Jakarta"
+
     command: --default-authentication-plugin=mysql_native_password
     volumes:
       - darsinurse_mysql_data:/var/lib/mysql
