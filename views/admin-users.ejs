@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Darsinurse - Manajemen User</title>
+  <title>Darsinurse - Manajemen Admin</title>
   <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏥</text></svg>">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -36,7 +36,6 @@ html, body {
   flex-direction: column;
 }
 
-/* Header */
 .top-header {
   background: white;
   padding: 1rem 0;
@@ -100,41 +99,37 @@ html, body {
   color: #c82333;
 }
 
-/* Main Content with padding for fixed header */
 .main-container {
   padding-top: 100px !important;
   flex: 1;
 }
 
-/* Navigation */
-.admin-nav {
+.nav-tabs {
   background: white;
-  padding: 15px 0;
-  margin-bottom: 30px;
   border-bottom: 2px solid var(--gray-border);
-  display: flex;
-  gap: 0;
+  margin-bottom: 30px;
 }
 
-.admin-nav a {
-  padding: 10px 20px;
+.nav-tabs .nav-link {
   color: var(--dark-text);
-  text-decoration: none;
-  font-weight: 500;
+  border: none;
   border-bottom: 3px solid transparent;
+  font-weight: 500;
+  padding: 12px 20px;
   transition: all 0.3s ease;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.admin-nav a:hover {
+.nav-tabs .nav-link:hover {
   color: var(--primary-green);
 }
 
-.admin-nav a.active {
+.nav-tabs .nav-link.active {
   color: var(--primary-green);
   border-bottom-color: var(--primary-green);
+  background: transparent;
 }
 
 .card {
@@ -157,10 +152,6 @@ html, body {
   align-items: center;
 }
 
-.card-header i {
-  margin-right: 8px;
-}
-
 .btn {
   border-radius: 8px;
   font-weight: 600;
@@ -176,7 +167,6 @@ html, body {
 
 .btn-primary:hover {
   background: var(--primary-dark);
-  color: white;
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 86, 179, 0.3);
 }
@@ -188,7 +178,6 @@ html, body {
 
 .btn-success:hover {
   background: #218838;
-  color: white;
 }
 
 .btn-warning {
@@ -198,7 +187,6 @@ html, body {
 
 .btn-warning:hover {
   background: #e0a800;
-  color: #212529;
 }
 
 .btn-danger {
@@ -208,7 +196,6 @@ html, body {
 
 .btn-danger:hover {
   background: #c82333;
-  color: white;
 }
 
 .btn-light {
@@ -219,17 +206,6 @@ html, body {
 
 .btn-light:hover {
   background: #f8f9fa;
-  color: var(--dark-text);
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #5a6268;
-  color: white;
 }
 
 .btn-sm {
@@ -238,9 +214,6 @@ html, body {
 }
 
 .table {
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
   margin-bottom: 0;
 }
 
@@ -258,10 +231,6 @@ html, body {
 .table tbody td {
   padding: 12px;
   border-bottom: 1px solid var(--gray-border);
-}
-
-.table tbody tr {
-  transition: all 0.2s ease;
 }
 
 .table tbody tr:hover {
@@ -345,16 +314,11 @@ html, body {
   opacity: 0.9;
 }
 
-.stats-card i {
-  opacity: 0.8;
-}
-
 .action-buttons {
   display: flex;
   gap: 5px;
 }
 
-/* Footer */
 .footer {
   background: #2c3e50;
   color: white;
@@ -400,11 +364,7 @@ html, body {
     font-size: 12px;
   }
 
-  .admin-nav {
-    flex-wrap: wrap;
-  }
-
-  .admin-nav a {
+  .nav-tabs .nav-link {
     padding: 8px 12px;
     font-size: 12px;
   }
@@ -415,11 +375,6 @@ html, body {
   
   .action-buttons .btn {
     width: 100%;
-  }
-
-  .footer-content {
-    flex-direction: column;
-    gap: 10px;
   }
 }
   </style>
@@ -448,93 +403,133 @@ html, body {
   </header>
 
   <div class="container-fluid py-4 main-container">
-    <!-- Admin Navigation -->
-    <div class="admin-nav">
-      <a href="/admin/manage-users" class="active">
-        <i class="fas fa-users-cog"></i> Kelola User/Perawat
-      </a>
-      <a href="/admin/manage-patients">
-        <i class="fas fa-user-injured"></i> Kelola Pasien
-      </a>
-    </div>
-
-    <!-- Statistics -->
-    <div class="row mb-4">
-      <div class="col-md-4">
-        <div class="stats-card">
-          <i class="fas fa-users fa-2x"></i>
-          <h3 id="total-users"><%= users.length %></h3>
-          <p>Total Users</p>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="stats-card" style="background: linear-gradient(135deg, var(--success-green), #1e7e34);">
-          <i class="fas fa-user-nurse fa-2x"></i>
-          <h3 id="total-perawat"><%= users.filter(u => u.role === 'perawat').length %></h3>
-          <p>Perawat</p>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <div class="stats-card" style="background: linear-gradient(135deg, #ffc107, #e0a800);">
-          <i class="fas fa-user-shield fa-2x"></i>
-          <h3 id="total-admin"><%= users.filter(u => u.role === 'admin').length %></h3>
-          <p>Administrator</p>
-        </div>
-      </div>
-    </div>
+    <!-- Tab Navigation -->
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-panel" type="button" role="tab">
+          <i class="fas fa-users-cog"></i> Kelola User/Perawat
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="patients-tab" data-bs-toggle="tab" data-bs-target="#patients-panel" type="button" role="tab">
+          <i class="fas fa-user-injured"></i> Kelola Pasien
+        </button>
+      </li>
+    </ul>
 
     <!-- Alert Container -->
     <div id="alert-container"></div>
 
-    <!-- Main Card -->
-    <div class="card">
-      <div class="card-header">
-        <span><i class="fas fa-users-cog"></i> Manajemen User</span>
-        <button class="btn btn-light btn-sm" onclick="showAddModal()">
-          <i class="fas fa-user-plus"></i> Tambah User
-        </button>
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Users Tab -->
+      <div class="tab-pane fade show active" id="users-panel" role="tabpanel">
+        <div class="row mb-4">
+          <div class="col-md-4">
+            <div class="stats-card">
+              <i class="fas fa-users fa-2x"></i>
+              <h3><%= users.length %></h3>
+              <p>Total Users</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stats-card" style="background: linear-gradient(135deg, var(--success-green), #1e7e34);">
+              <i class="fas fa-user-nurse fa-2x"></i>
+              <h3><%= users.filter(u => u.role === 'perawat').length %></h3>
+              <p>Perawat</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stats-card" style="background: linear-gradient(135deg, #ffc107, #e0a800);">
+              <i class="fas fa-user-shield fa-2x"></i>
+              <h3><%= users.filter(u => u.role === 'admin').length %></h3>
+              <p>Administrator</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span><i class="fas fa-users-cog"></i> Manajemen User</span>
+            <button class="btn btn-light btn-sm" onclick="showAddUserModal()">
+              <i class="fas fa-user-plus"></i> Tambah User
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>ID Perawat</th>
+                    <th>Nama</th>
+                    <th>Role</th>
+                    <th>Tanggal Dibuat</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="user-table-body">
+                  <% users.forEach(user => { %>
+                    <tr>
+                      <td><strong><%= user.id_perawat %></strong></td>
+                      <td><%= user.nama %></td>
+                      <td>
+                        <span class="badge <%= user.role === 'admin' ? 'bg-primary' : 'bg-success' %>">
+                          <i class="fas <%= user.role === 'admin' ? 'fa-crown' : 'fa-user-nurse' %>"></i>
+                          <%= user.role === 'admin' ? 'Admin' : 'Perawat' %>
+                        </span>
+                      </td>
+                      <td><%= new Date(user.created_at).toLocaleDateString('id-ID') %></td>
+                      <td>
+                        <div class="action-buttons">
+                          <button class="btn btn-sm btn-warning" onclick="showEditUserModal('<%= user.id_perawat %>', '<%= user.nama %>', '<%= user.role %>')">
+                            <i class="fas fa-edit"></i> Edit
+                          </button>
+                          <% if (user.id_perawat !== id_perawat) { %>
+                            <button class="btn btn-sm btn-danger" onclick="deleteUser('<%= user.id_perawat %>', '<%= user.nama %>')">
+                              <i class="fas fa-trash"></i> Hapus
+                            </button>
+                          <% } %>
+                        </div>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-hover">
-            <thead>
-              <tr>
-                <th>ID Perawat</th>
-                <th>Nama</th>
-                <th>Role</th>
-                <th>Tanggal Dibuat</th>
-                <th>Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="user-table-body">
-              <% users.forEach(user => { %>
-                <tr data-id="<%= user.id_perawat %>">
-                  <td><strong><%= user.id_perawat %></strong></td>
-                  <td><%= user.nama %></td>
-                  <td>
-                    <% if (user.role === 'admin') { %>
-                      <span class="badge bg-primary"><i class="fas fa-crown"></i> Admin</span>
-                    <% } else { %>
-                      <span class="badge bg-success"><i class="fas fa-user-nurse"></i> Perawat</span>
-                    <% } %>
-                  </td>
-                  <td><%= new Date(user.created_at).toLocaleDateString('id-ID') %></td>
-                  <td>
-                    <div class="action-buttons">
-                      <button class="btn btn-sm btn-warning" onclick="showEditModal('<%= user.id_perawat %>', '<%= user.nama %>', '<%= user.role %>')">
-                        <i class="fas fa-edit"></i> Edit
-                      </button>
-                      <% if (user.id_perawat !== id_perawat) { %>
-                        <button class="btn btn-sm btn-danger" onclick="deleteUser('<%= user.id_perawat %>', '<%= user.nama %>')">
-                          <i class="fas fa-trash"></i> Hapus
-                        </button>
-                      <% } %>
-                    </div>
-                  </td>
-                </tr>
-              <% }) %>
-            </tbody>
-          </table>
+
+      <!-- Patients Tab -->
+      <div class="tab-pane fade" id="patients-panel" role="tabpanel">
+        <div class="card">
+          <div class="card-header">
+            <span><i class="fas fa-user-injured"></i> Manajemen Data Pasien</span>
+            <button class="btn btn-light btn-sm" onclick="showAddPatientModal()">
+              <i class="fas fa-plus"></i> Tambah Pasien
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>ID Pasien</th>
+                    <th>Nama</th>
+                    <th>Alamat</th>
+                    <th>Tanggal Lahir</th>
+                    <th>Terdaftar</th>
+                    <th>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="patients-table-body">
+                  <tr>
+                    <td colspan="6" class="text-center text-muted">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -554,8 +549,8 @@ html, body {
     </div>
   </footer>
 
-  <!-- Modal Add User -->
-  <div class="modal fade" id="addModal" tabindex="-1">
+  <!-- Modals -->
+  <div class="modal fade" id="addUserModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -563,27 +558,25 @@ html, body {
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <form id="addUserForm">
-            <div class="mb-3">
-              <label class="form-label">ID Perawat</label>
-              <input type="text" class="form-control" id="add-id" placeholder="Contoh: P004" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Nama Lengkap</label>
-              <input type="text" class="form-control" id="add-nama" placeholder="Masukkan nama lengkap" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Password</label>
-              <input type="password" class="form-control" id="add-password" placeholder="Masukkan password" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Role</label>
-              <select class="form-select" id="add-role" required>
-                <option value="perawat">Perawat</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </form>
+          <div class="mb-3">
+            <label class="form-label">ID Perawat</label>
+            <input type="text" class="form-control" id="add-id" placeholder="Contoh: P004" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nama Lengkap</label>
+            <input type="text" class="form-control" id="add-nama" placeholder="Masukkan nama lengkap" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="add-password" placeholder="Masukkan password" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="add-role" required>
+              <option value="perawat">Perawat</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
@@ -595,8 +588,7 @@ html, body {
     </div>
   </div>
 
-  <!-- Modal Edit User -->
-  <div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal fade" id="editUserModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -604,28 +596,26 @@ html, body {
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <form id="editUserForm">
-            <input type="hidden" id="edit-id">
-            <div class="mb-3">
-              <label class="form-label">ID Perawat</label>
-              <input type="text" class="form-control" id="edit-id-display" disabled>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Nama Lengkap</label>
-              <input type="text" class="form-control" id="edit-nama" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Password Baru (kosongkan jika tidak ingin mengubah)</label>
-              <input type="password" class="form-control" id="edit-password" placeholder="Masukkan password baru">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Role</label>
-              <select class="form-select" id="edit-role" required>
-                <option value="perawat">Perawat</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </form>
+          <input type="hidden" id="edit-id">
+          <div class="mb-3">
+            <label class="form-label">ID Perawat</label>
+            <input type="text" class="form-control" id="edit-id-display" disabled>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nama Lengkap</label>
+            <input type="text" class="form-control" id="edit-nama" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password Baru (kosongkan jika tidak ingin mengubah)</label>
+            <input type="password" class="form-control" id="edit-password" placeholder="Masukkan password baru">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="edit-role" required>
+              <option value="perawat">Perawat</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
@@ -637,42 +627,109 @@ html, body {
     </div>
   </div>
 
+  <div class="modal fade" id="addPatientModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="patientModalTitle"><i class="fas fa-user-plus"></i> Tambah Pasien Baru</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">ID Pasien</label>
+            <input type="text" class="form-control" id="id_pasien" placeholder="Contoh: PAT001" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Nama Pasien</label>
+            <input type="text" class="form-control" id="nama" placeholder="Nama lengkap" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Alamat</label>
+            <textarea class="form-control" id="alamat" rows="2" placeholder="Alamat lengkap" required></textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Tanggal Lahir</label>
+            <input type="date" class="form-control" id="tanggal_lahir" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="button" class="btn btn-primary" id="savePatientBtn">
+            <i class="fas fa-save"></i> Simpan
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="measurementsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-chart-line"></i> Riwayat Pengukuran - <span id="patientNameModal"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Tipe Device</th>
+                  <th>Data</th>
+                  <th>Perawat</th>
+                </tr>
+              </thead>
+              <tbody id="measurements-table-body">
+                <tr>
+                  <td colspan="4" class="text-center text-muted">Loading...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    let addModal, editModal;
+    let addUserModal, editUserModal, addPatientModal, measurementsModal;
+    let currentEditPatientId = null;
 
     document.addEventListener('DOMContentLoaded', () => {
-      addModal = new bootstrap.Modal(document.getElementById('addModal'));
-      editModal = new bootstrap.Modal(document.getElementById('editModal'));
+      addUserModal = new bootstrap.Modal(document.getElementById('addUserModal'));
+      editUserModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+      addPatientModal = new bootstrap.Modal(document.getElementById('addPatientModal'));
+      measurementsModal = new bootstrap.Modal(document.getElementById('measurementsModal'));
+      document.getElementById('patients-tab').addEventListener('shown.bs.tab', loadPatients);
     });
 
     function showAlert(message, type = 'success') {
       const alertContainer = document.getElementById('alert-container');
       const alertDiv = document.createElement('div');
       alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-      alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      `;
+      alertDiv.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
       alertContainer.appendChild(alertDiv);
-      
-      setTimeout(() => {
-        alertDiv.remove();
-      }, 5000);
+      setTimeout(() => alertDiv.remove(), 5000);
     }
 
-    function showAddModal() {
-      document.getElementById('addUserForm').reset();
-      addModal.show();
+    // USER MANAGEMENT
+    function showAddUserModal() {
+      document.getElementById('add-id').value = '';
+      document.getElementById('add-nama').value = '';
+      document.getElementById('add-password').value = '';
+      document.getElementById('add-role').value = 'perawat';
+      addUserModal.show();
     }
 
-    function showEditModal(id, nama, role) {
+    function showEditUserModal(id, nama, role) {
       document.getElementById('edit-id').value = id;
       document.getElementById('edit-id-display').value = id;
       document.getElementById('edit-nama').value = nama;
       document.getElementById('edit-role').value = role;
       document.getElementById('edit-password').value = '';
-      editModal.show();
+      editUserModal.show();
     }
 
     async function addUser() {
@@ -694,10 +751,9 @@ html, body {
         });
 
         const result = await response.json();
-
         if (result.success) {
           showAlert('User berhasil ditambahkan!', 'success');
-          addModal.hide();
+          addUserModal.hide();
           setTimeout(() => location.reload(), 1000);
         } else {
           showAlert(result.error || 'Gagal menambahkan user', 'danger');
@@ -726,10 +782,9 @@ html, body {
         });
 
         const result = await response.json();
-
         if (result.success) {
           showAlert('User berhasil diupdate!', 'success');
-          editModal.hide();
+          editUserModal.hide();
           setTimeout(() => location.reload(), 1000);
         } else {
           showAlert(result.error || 'Gagal mengupdate user', 'danger');
@@ -740,17 +795,11 @@ html, body {
     }
 
     async function deleteUser(id, nama) {
-      if (!confirm(`Yakin ingin menghapus user "${nama}"?\nTindakan ini tidak dapat dibatalkan!`)) {
-        return;
-      }
+      if (!confirm(`Yakin ingin menghapus user "${nama}"?`)) return;
 
       try {
-        const response = await fetch(`/admin/api/users/${id}`, {
-          method: 'DELETE'
-        });
-
+        const response = await fetch(`/admin/api/users/${id}`, { method: 'DELETE' });
         const result = await response.json();
-
         if (result.success) {
           showAlert('User berhasil dihapus!', 'success');
           setTimeout(() => location.reload(), 1000);
@@ -760,6 +809,152 @@ html, body {
       } catch (err) {
         showAlert('Error: ' + err.message, 'danger');
       }
+    }
+
+    // PATIENT MANAGEMENT
+    async function loadPatients() {
+      try {
+        const response = await fetch('/admin/api/patients');
+        const result = await response.json();
+
+        if (!result.success) throw new Error(result.error);
+
+        const tbody = document.getElementById('patients-table-body');
+        tbody.innerHTML = '';
+
+        if (result.patients.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Belum ada data pasien</td></tr>';
+          return;
+        }
+
+        result.patients.forEach(patient => {
+          const birthDate = new Date(patient.tanggal_lahir);
+          const createdDate = new Date(patient.created_at);
+          
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>${patient.id_pasien}</strong></td>
+              <td>${patient.nama}</td>
+              <td>${patient.alamat}</td>
+              <td>${birthDate.toLocaleDateString('id-ID')}</td>
+              <td><small>${createdDate.toLocaleDateString('id-ID')}</small></td>
+              <td>
+                <div class="action-buttons">
+                  <button class="btn btn-sm btn-warning" onclick="editPatient('${patient.id_pasien}', '${patient.nama}', '${patient.alamat}', '${patient.tanggal_lahir}')">
+                    <i class="fas fa-edit"></i> Edit
+                  </button>
+                  <button class="btn btn-sm btn-info" onclick="viewMeasurements('${patient.id_pasien}', '${patient.nama}')">
+                    <i class="fas fa-chart-line"></i> Riwayat
+                  </button>
+                  <button class="btn btn-sm btn-danger" onclick="deletePatient('${patient.id_pasien}', '${patient.nama}')">
+                    <i class="fas fa-trash"></i> Hapus
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `;
+        });
+      } catch (error) {
+        showAlert('Gagal memuat data pasien: ' + error.message, 'danger');
+      }
+    }
+
+    function showAddPatientModal() {
+      currentEditPatientId = null;
+      document.getElementById('id_pasien').value = '';
+      document.getElementById('id_pasien').disabled = false;
+      document.getElementById('nama').value = '';
+      document.getElementById('alamat').value = '';
+      document.getElementById('tanggal_lahir').value = '';
+      document.getElementById('patientModalTitle').textContent = '➕ Tambah Pasien Baru';
+      addPatientModal.show();
+    }
+
+    document.getElementById('savePatientBtn')?.addEventListener('click', async () => {
+      const id = document.getElementById('id_pasien').value;
+      const nama = document.getElementById('nama').value;
+      const alamat = document.getElementById('alamat').value;
+      const tanggal_lahir = document.getElementById('tanggal_lahir').value;
+
+      if (!id || !nama || !alamat || !tanggal_lahir) {
+        showAlert('Semua field harus diisi', 'danger');
+        return;
+      }
+
+      const method = currentEditPatientId ? 'PUT' : 'POST';
+      const endpoint = currentEditPatientId ? `/admin/api/patients/${currentEditPatientId}` : '/admin/api/patients';
+
+      try {
+        const response = await fetch(endpoint, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nama, alamat, tanggal_lahir })
+        });
+
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error);
+
+        showAlert(result.message, 'success');
+        addPatientModal.hide();
+        loadPatients();
+      } catch (error) {
+        showAlert('Error: ' + error.message, 'danger');
+      }
+    });
+
+    function editPatient(id, nama, alamat, tanggal_lahir) {
+      currentEditPatientId = id;
+      document.getElementById('id_pasien').value = id;
+      document.getElementById('id_pasien').disabled = true;
+      document.getElementById('nama').value = nama;
+      document.getElementById('alamat').value = alamat;
+      document.getElementById('tanggal_lahir').value = tanggal_lahir;
+      document.getElementById('patientModalTitle').textContent = '✏️ Edit Data Pasien';
+      addPatientModal.show();
+    }
+
+    function deletePatient(id, nama) {
+      if (!confirm(`Yakin hapus pasien "${nama}"?\nData pengukuran juga akan dihapus!`)) return;
+
+      fetch(`/admin/api/patients/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(result => {
+          if (!result.success) throw new Error(result.error);
+          showAlert(result.message, 'success');
+          loadPatients();
+        })
+        .catch(err => showAlert('Error: ' + err.message, 'danger'));
+    }
+
+    function viewMeasurements(id, nama) {
+      document.getElementById('patientNameModal').textContent = nama;
+      
+      fetch(`/admin/api/patients/${id}/measurements`)
+        .then(r => r.json())
+        .then(result => {
+          const tbody = document.getElementById('measurements-table-body');
+          tbody.innerHTML = '';
+
+          if (result.measurements.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Belum ada data pengukuran</td></tr>';
+            measurementsModal.show();
+            return;
+          }
+
+          result.measurements.forEach(m => {
+            const date = new Date(m.timestamp);
+            tbody.innerHTML += `
+              <tr>
+                <td><small>${date.toLocaleString('id-ID')}</small></td>
+                <td>${m.tipe_device}</td>
+                <td><strong>${m.data}</strong></td>
+                <td>${m.nama_perawat}</td>
+              </tr>
+            `;
+          });
+          measurementsModal.show();
+        })
+        .catch(err => showAlert('Error: ' + err.message, 'danger'));
     }
   </script>
 </body>

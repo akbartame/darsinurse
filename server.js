@@ -94,7 +94,6 @@ async function initDatabase() {
     if (perawat[0].c === 0) {
       console.log('🔄 Initializing default users...');
       
-      // Insert users
       await conn.query(`
         INSERT INTO perawat (id_perawat, nama, password, role) VALUES
         ('ADMIN01', 'Administrator', ?, 'admin'),
@@ -108,11 +107,7 @@ async function initDatabase() {
         hashPassword('pass789')
       ]);
       
-      console.log('✓ Default users created:');
-      console.log('  - ADMIN01 / admin123 (admin)');
-      console.log('  - P001 / pass123 (perawat)');
-      console.log('  - P002 / pass456 (perawat)');
-      console.log('  - P003 / pass789 (perawat)');
+      console.log('✓ Default users created');
     } else {
       console.log(`✓ Found ${perawat[0].c} existing users`);
     }
@@ -221,7 +216,6 @@ app.post('/login', async (req, res) => {
 
     const user = rows[0];
     console.log('👤 User found:', user.id_perawat, '- Role:', user.role);
-    console.log('🔑 Password match:', user.password === hash);
 
     if (user.password === hash) {
       req.session.id_perawat = user.id_perawat;
@@ -258,7 +252,7 @@ app.get('/dashboard', requireLogin, (req, res) => {
 
 // ========== ADMIN ROUTES ==========
 
-// MANAGE USERS PAGE
+// MANAGE USERS PAGE (COMBINED dengan PATIENTS)
 app.get('/admin/manage-users', requireAdmin, async (req, res) => {
   const conn = await pool.getConnection();
   const [users] = await conn.query(
@@ -351,7 +345,6 @@ app.put('/admin/api/users/:id', requireAdmin, async (req, res) => {
 app.delete('/admin/api/users/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
   
-  // Prevent deleting own account
   if (id === req.session.id_perawat) {
     return res.status(400).json({ error: 'Tidak bisa menghapus akun sendiri' });
   }
@@ -369,95 +362,7 @@ app.delete('/admin/api/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
-// RESET PASSWORD USER (Admin feature)
-app.post('/admin/api/users/:id/reset-password', requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { new_password } = req.body;
-  
-  if (!new_password) {
-    return res.status(400).json({ error: 'Password baru harus diisi' });
-  }
-
-  try {
-    const conn = await pool.getConnection();
-    const hash = hashPassword(new_password);
-    await conn.query(
-      'UPDATE perawat SET password = ? WHERE id_perawat = ?',
-      [hash, id]
-    );
-    conn.release();
-    
-    console.log('✓ Password reset for:', id);
-    res.json({ success: true, message: 'Password berhasil direset' });
-  } catch (err) {
-    console.error('❌ Reset password error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
 // ========== ADMIN PASIEN ROUTES ==========
-
-// UPDATE LOGIN ROUTE - Tambahkan redirect ke manage-patients untuk admin
-app.post('/login', async (req, res) => {
-  const { id_perawat, password } = req.body;
-  
-  console.log('🔐 Login attempt:', id_perawat);
-  
-  const hash = hashPassword(password);
-  
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(
-      'SELECT * FROM perawat WHERE id_perawat = ?',
-      [id_perawat]
-    );
-    conn.release();
-
-    if (rows.length === 0) {
-      console.log('❌ User not found:', id_perawat);
-      return res.render('login', { error: 'ID Perawat tidak ditemukan!' });
-    }
-
-    const user = rows[0];
-    console.log('👤 User found:', user.id_perawat, '- Role:', user.role);
-    console.log('🔑 Password match:', user.password === hash);
-
-    if (user.password === hash) {
-      req.session.id_perawat = user.id_perawat;
-      req.session.nama_perawat = user.nama;
-      req.session.role = user.role;
-      
-      console.log('✓ Login success:', user.nama);
-      
-      // Redirect berdasarkan role
-      if (user.role === 'admin') {
-        return res.redirect('/admin/manage-patients'); // UPDATED
-      }
-      return res.redirect('/dashboard');
-    } else {
-      console.log('❌ Wrong password for:', id_perawat);
-      return res.render('login', { error: 'Password salah!' });
-    }
-  } catch (err) {
-    console.error('❌ Login error:', err);
-    return res.render('login', { error: 'Terjadi kesalahan sistem!' });
-  }
-});
-
-// MANAGE PATIENTS PAGE
-app.get('/admin/manage-patients', requireAdmin, async (req, res) => {
-  const conn = await pool.getConnection();
-  const [patients] = await conn.query(
-    'SELECT id_pasien, nama, alamat, tanggal_lahir, created_at FROM pasien ORDER BY created_at DESC'
-  );
-  conn.release();
-
-  res.render('admin-patients', {
-    nama_perawat: req.session.nama_perawat,
-    id_perawat: req.session.id_perawat,
-    patients: patients
-  });
-});
 
 // GET ALL PATIENTS (API)
 app.get('/admin/api/patients', requireAdmin, async (req, res) => {
@@ -534,7 +439,7 @@ app.delete('/admin/api/patients/:id', requireAdmin, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     
-    // Hapus data pengukuran terlebih dahulu (foreign key constraint)
+    // Hapus data pengukuran terlebih dahulu
     await conn.query('DELETE FROM pengukuran WHERE id_pasien = ?', [id]);
     
     // Hapus pasien
@@ -632,16 +537,6 @@ app.get('/logout', (req, res) => {
   console.log('👋 Logout:', req.session.nama_perawat);
   req.session.destroy();
   res.redirect('/');
-});
-
-// TEST ROUTE - untuk debug (hapus di production)
-app.get('/test-hash', (req, res) => {
-  const testPassword = req.query.pass || 'admin123';
-  const hash = hashPassword(testPassword);
-  res.json({
-    password: testPassword,
-    hash: hash
-  });
 });
 
 /* ============================================================
