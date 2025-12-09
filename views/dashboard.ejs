@@ -894,65 +894,31 @@ html, body {
       }
     }
 
-    // ==== BP HANDLER ====
-    // ==== BP HANDLER (DIPERBAIKI UNTUK DATA LENGKAP) ====
+    // ==== BP HANDLER ====// 
+    // ==== BP HANDLER (HANYA SYSTOLIC & DIASTOLIC) ====//
     function handleBP(event) {
       try {
         const value = event.target.value;
         const bytes = new Uint8Array(value.buffer);
 
         if (bytes.length >= 5) {
-          // Flags (byte 0)
-          const flags = bytes[0];
-          
           // Systolic (bytes 1-2, SFLOAT)
-          const systolicRaw = bytes[1] | (bytes[2] << 8);
           const systolic = parseSFLOAT([bytes[1], bytes[2], 0]);
           
           // Diastolic (bytes 3-4, SFLOAT)
-          const diastolicRaw = bytes[3] | (bytes[4] << 8);
           const diastolic = parseSFLOAT([bytes[3], bytes[4], 0]);
           
-          let bpValue = `${Math.round(systolic)}/${Math.round(diastolic)}`;
-          let additionalData = {};
+          const bpValue = `${Math.round(systolic)}/${Math.round(diastolic)}`;
           
-          let byteIndex = 5;
-          
-          // Mean Arterial Pressure (opsional, jika bit 0 flag = 1)
-          if ((flags & 0x01) && byteIndex + 2 < bytes.length) {
-            const meanAP = parseSFLOAT([bytes[byteIndex], bytes[byteIndex + 1], 0]);
-            additionalData.meanAP = Math.round(meanAP * 10) / 10;
-            byteIndex += 2;
-          }
-          
-          // Pulse Rate (opsional, jika bit 2 flag = 1)
-          if ((flags & 0x04) && byteIndex + 2 < bytes.length) {
-            const pulse = parseSFLOAT([bytes[byteIndex], bytes[byteIndex + 1], 0]);
-            additionalData.pulse = Math.round(pulse);
-            byteIndex += 2;
-          }
-                    
           // Simpan data
           measurementData.bp = bpValue;
-          measurementData.bpFull = {
-            systolic: Math.round(systolic),
-            diastolic: Math.round(diastolic),
-            ...additionalData
-          };
           
           // Update display
           document.getElementById('bp-value').textContent = bpValue;
           document.getElementById('btn-save-bp').disabled = false;
           
-          // Log dengan data lengkap
-          let logMessage = `Tensi terukur: ${bpValue} mmHg`;
-          if (additionalData.meanAP) logMessage += `, Mean AP: ${additionalData.meanAP}`;
-          if (additionalData.pulse) logMessage += `, Pulse: ${additionalData.pulse} bpm`;
-          
-          addLog(logMessage, 'success');
-          showStatus('bp', `✓ ${logMessage}`, 'success');
-          
-          console.log('BP Data Lengkap:', measurementData.bpFull);
+          addLog(`Tensi terukur: ${bpValue} mmHg`, 'success');
+          showStatus('bp', `✓ Tensi terukur: ${bpValue} mmHg`, 'success');
         }
       } catch (err) {
         addLog(`Error parsing tensi: ${err.message}`, 'error');
@@ -962,13 +928,11 @@ html, body {
     // ==== UPDATE SEND TO SERVER UNTUK BP ====
     document.getElementById('form-bp').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const value = measurementData.bpFull || { systolic: 0, diastolic: 0 };
+      const value = measurementData.bp;
       const idPasien = currentPatients.bp;
       
-      if (value.systolic && idPasien) {
-        // Kirim data lengkap
-        const dataToSend = JSON.stringify(value);
-        const success = await sendToServer('tensimeter', idPasien, dataToSend);
+      if (value && idPasien) {
+        const success = await sendToServer('tensimeter', idPasien, value);
         
         if (success) {
           alert('Data Tekanan Darah berhasil disimpan!');
@@ -977,12 +941,11 @@ html, body {
             document.getElementById('bp-value').textContent = '-';
             document.getElementById('btn-save-bp').disabled = true;
             stopConnection('bp');
-            measurementData.bp = null;
-            measurementData.bpFull = null;
           }, 500);
         }
       }
     });
+
     // ==== HR HANDLER ====
     function handleHR(event) {
       try {
