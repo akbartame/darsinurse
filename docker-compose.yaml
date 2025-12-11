@@ -41,8 +41,6 @@ services:
     restart: always
     environment:
       PMA_HOST: darsinurse-db
-      PMA_USER: darsinurse
-      PMA_PASSWORD: darsinurse123
       TZ: Asia/Jakarta
     volumes:
       - /etc/localtime:/etc/localtime:ro
