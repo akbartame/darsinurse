@@ -427,7 +427,7 @@ html, body {
           </div>
         </div>
         <div class="user-info">
-          <span class="user-name"><i class="fas fa-user-nurse"></i> <%= nama_perawat || 'Perawat' %></span>
+          <span class="user-name"><i class="fas fa-user-nurse"></i> <%= nama_perawat || 'Perawat' %> (EMR: <%= emr_perawat %>)</span>
           <span>|</span>
           <a href="/logout" onclick="return confirm('Yakin logout?')">
             <i class="fas fa-sign-out-alt"></i> Logout
@@ -501,13 +501,14 @@ html, body {
             <div class="card-body">
               <form id="form-glucose">
                 <div class="mb-3">
-                  <label class="form-label">ID Perawat</label>
-                  <input type="text" class="form-control" id="glucose-id-perawat" value="<%= id_perawat %>" disabled>
+                  <label class="form-label">EMR Pasien (Angka)</label>
+                  <input type="number" class="form-control" id="glucose-emr-pasien" placeholder="Contoh: 101" required>
+                  <div id="glucose-patient-info"></div>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">ID Pasien</label>
-                  <input type="text" class="form-control" id="glucose-id-pasien" placeholder="Contoh: PAT001" required>
-                  <div id="glucose-patient-info"></div>
+                  <label class="form-label">ID Kunjungan (Angka)</label>
+                  <input type="number" class="form-control" id="glucose-id-kunjungan" placeholder="Contoh: 1001" required>
+                  <small class="text-muted">Masukkan ID kunjungan yang valid</small>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Nilai Glukosa (mg/dL)</label>
@@ -546,13 +547,14 @@ html, body {
             <div class="card-body">
               <form id="form-bp">
                 <div class="mb-3">
-                  <label class="form-label">ID Perawat</label>
-                  <input type="text" class="form-control" id="bp-id-perawat" value="<%= id_perawat %>" disabled>
+                  <label class="form-label">EMR Pasien (Angka)</label>
+                  <input type="number" class="form-control" id="bp-emr-pasien" placeholder="Contoh: 101" required>
+                  <div id="bp-patient-info"></div>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">ID Pasien</label>
-                  <input type="text" class="form-control" id="bp-id-pasien" placeholder="Contoh: PAT001" required>
-                  <div id="bp-patient-info"></div>
+                  <label class="form-label">ID Kunjungan (Angka)</label>
+                  <input type="number" class="form-control" id="bp-id-kunjungan" placeholder="Contoh: 1001" required>
+                  <small class="text-muted">Masukkan ID kunjungan yang valid</small>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Tekanan Darah (mmHg)</label>
@@ -591,13 +593,14 @@ html, body {
             <div class="card-body">
               <form id="form-hr">
                 <div class="mb-3">
-                  <label class="form-label">ID Perawat</label>
-                  <input type="text" class="form-control" id="hr-id-perawat" value="<%= id_perawat %>" disabled>
+                  <label class="form-label">EMR Pasien (Angka)</label>
+                  <input type="number" class="form-control" id="hr-emr-pasien" placeholder="Contoh: 101" required>
+                  <div id="hr-patient-info"></div>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">ID Pasien</label>
-                  <input type="text" class="form-control" id="hr-id-pasien" placeholder="Contoh: PAT001" required>
-                  <div id="hr-patient-info"></div>
+                  <label class="form-label">ID Kunjungan (Angka)</label>
+                  <input type="number" class="form-control" id="hr-id-kunjungan" placeholder="Contoh: 1001" required>
+                  <small class="text-muted">Masukkan ID kunjungan yang valid</small>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Detak Jantung (bpm)</label>
@@ -636,13 +639,14 @@ html, body {
             <div class="card-body">
               <form id="form-weight">
                 <div class="mb-3">
-                  <label class="form-label">ID Perawat</label>
-                  <input type="text" class="form-control" id="weight-id-perawat" value="<%= id_perawat %>" disabled>
+                  <label class="form-label">EMR Pasien (Angka)</label>
+                  <input type="number" class="form-control" id="weight-emr-pasien" placeholder="Contoh: 101" required>
+                  <div id="weight-patient-info"></div>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label">ID Pasien</label>
-                  <input type="text" class="form-control" id="weight-id-pasien" placeholder="Contoh: PAT001" required>
-                  <div id="weight-patient-info"></div>
+                  <label class="form-label">ID Kunjungan (Angka)</label>
+                  <input type="number" class="form-control" id="weight-id-kunjungan" placeholder="Contoh: 1001" required>
+                  <small class="text-muted">Masukkan ID kunjungan yang valid</small>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Tinggi Badan (cm)</label>
@@ -733,7 +737,7 @@ html, body {
 
     // ==== STATE ====
     const activityLog = document.getElementById('activity-log');
-    const idPerawat = '<%= id_perawat %>';
+    const emrPerawat = <%= emr_perawat %>;
     
     let currentDevices = {
       glucose: null,
@@ -752,6 +756,13 @@ html, body {
     };
 
     let currentPatients = {
+      glucose: null,
+      bp: null,
+      hr: null,
+      weight: null
+    };
+
+    let currentVisits = {
       glucose: null,
       bp: null,
       hr: null,
@@ -805,21 +816,21 @@ html, body {
     }
 
     // ==== VALIDATE PATIENT ====
-    async function validatePatient(idPasien, type) {
+    async function validatePatient(emrPasien, type) {
       try {
-        const response = await fetch(`/validasi_pasien/${idPasien}`);
+        const response = await fetch(`/validasi_pasien/${emrPasien}`);
         const result = await response.json();
 
         const infoDiv = document.getElementById(`${type}-patient-info`);
         
         if (result.valid) {
-          currentPatients[type] = idPasien;
-          infoDiv.innerHTML = `<div class="patient-info mt-2">✓ <strong>${result.pasien.nama}</strong><br><small>${result.pasien.alamat}</small></div>`;
-          addLog(`Pasien ditemukan: ${result.pasien.nama}`, 'success');
+          currentPatients[type] = emrPasien;
+          infoDiv.innerHTML = `<div class="patient-info mt-2">✓ <strong>${result.pasien.nama}</strong><br><small>Poli: ${result.pasien.poli} | ${result.pasien.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</small></div>`;
+          addLog(`Pasien ditemukan: ${result.pasien.nama} (EMR: ${emrPasien})`, 'success');
           return true;
         } else {
-          infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Pasien tidak ditemukan</div>`;
-          addLog('Pasien tidak ditemukan', 'error');
+          infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Pasien dengan EMR ${emrPasien} tidak ditemukan</div>`;
+          addLog(`Pasien EMR ${emrPasien} tidak ditemukan`, 'error');
           return false;
         }
       } catch (err) {
@@ -831,14 +842,14 @@ html, body {
     }
 
     // ==== SEND DATA TO SERVER ====
-    async function sendToServer(tipe, idPasien, dataValue) {
+    async function sendToServer(tipe, emrPasien, idKunjungan, dataValue) {
       try {
         const response = await fetch('/simpan_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id_perawat: idPerawat,
-            id_pasien: idPasien,
+            id_kunjungan: parseInt(idKunjungan),
+            emr_pasien: parseInt(emrPasien),
             tipe_device: tipe,
             data: dataValue
           })
@@ -847,7 +858,7 @@ html, body {
         const result = await response.json();
         
         if (result.success) {
-          addLog(`${tipe} disimpan: ${dataValue}`, 'success');
+          addLog(`${tipe} disimpan ke database (ID: ${result.id})`, 'success');
           return true;
         } else {
           addLog(`Error menyimpan: ${result.error}`, 'error');
@@ -894,26 +905,19 @@ html, body {
       }
     }
 
-    // ==== BP HANDLER ====// 
-    // ==== BP HANDLER (HANYA SYSTOLIC & DIASTOLIC) ====//
+    // ==== BP HANDLER ====
     function handleBP(event) {
       try {
         const value = event.target.value;
         const bytes = new Uint8Array(value.buffer);
 
         if (bytes.length >= 5) {
-          // Systolic (bytes 1-2, SFLOAT)
           const systolic = parseSFLOAT([bytes[1], bytes[2], 0]);
-          
-          // Diastolic (bytes 3-4, SFLOAT)
           const diastolic = parseSFLOAT([bytes[3], bytes[4], 0]);
           
           const bpValue = `${Math.round(systolic)}/${Math.round(diastolic)}`;
           
-          // Simpan data
           measurementData.bp = bpValue;
-          
-          // Update display
           document.getElementById('bp-value').textContent = bpValue;
           document.getElementById('btn-save-bp').disabled = false;
           
@@ -924,27 +928,6 @@ html, body {
         addLog(`Error parsing tensi: ${err.message}`, 'error');
       }
     }
-
-    // ==== UPDATE SEND TO SERVER UNTUK BP ====
-    document.getElementById('form-bp').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const value = measurementData.bp;
-      const idPasien = currentPatients.bp;
-      
-      if (value && idPasien) {
-        const success = await sendToServer('tensimeter', idPasien, value);
-        
-        if (success) {
-          alert('Data Tekanan Darah berhasil disimpan!');
-          setTimeout(() => {
-            backToMenu();
-            document.getElementById('bp-value').textContent = '-';
-            document.getElementById('btn-save-bp').disabled = true;
-            stopConnection('bp');
-          }, 500);
-        }
-      }
-    });
 
     // ==== HR HANDLER ====
     function handleHR(event) {
@@ -1030,39 +1013,26 @@ html, body {
     }
 
     // ==== STOP CONNECTION ====
-// ==== STOP CONNECTION (DIPERBAIKI) ====
     function stopConnection(type) {
       try {
-        // Cek apakah device ada
         if (currentDevices[type]) {
-          // Coba disconnect
           if (currentDevices[type].gatt && currentDevices[type].gatt.connected) {
             currentDevices[type].gatt.disconnect();
           }
-          
-          // Set device ke null
           currentDevices[type] = null;
-          
-          // Update UI
           document.getElementById(`btn-scan-${type}`).disabled = false;
           document.getElementById(`btn-stop-${type}`).disabled = true;
-          
-          // Feedback
           addLog(`Koneksi ${getMeasurementName(type)} dihentikan`, 'success');
           showStatus(type, '✓ Koneksi dihentikan', 'success');
         } else {
-          // Jika device tidak ada, pastikan UI tetap konsisten
           document.getElementById(`btn-scan-${type}`).disabled = false;
           document.getElementById(`btn-stop-${type}`).disabled = true;
           addLog(`${getMeasurementName(type)} sudah tidak terhubung`, 'info');
           showStatus(type, '✓ Device sudah tidak terhubung', 'info');
         }
       } catch (err) {
-        // Error handling
         addLog(`Error saat disconnect: ${err.message}`, 'error');
         showStatus(type, `✗ Error: ${err.message}`, 'danger');
-        
-        // Tetap reset UI walaupun error
         currentDevices[type] = null;
         document.getElementById(`btn-scan-${type}`).disabled = false;
         document.getElementById(`btn-stop-${type}`).disabled = true;
@@ -1071,14 +1041,23 @@ html, body {
     
     // ==== SCAN BLUETOOTH DEVICE ====
     async function scanBLE(type, service, characteristic, handler) {
-      const idPasien = document.getElementById(`${type}-id-pasien`).value.trim();
-      if (!idPasien) {
-        alert('Masukkan ID Pasien terlebih dahulu');
+      const emrPasien = parseInt(document.getElementById(`${type}-emr-pasien`).value);
+      const idKunjungan = parseInt(document.getElementById(`${type}-id-kunjungan`).value);
+      
+      if (!emrPasien || isNaN(emrPasien)) {
+        alert('Masukkan EMR Pasien yang valid (angka)');
         return;
       }
 
-      const valid = await validatePatient(idPasien, type);
+      if (!idKunjungan || isNaN(idKunjungan)) {
+        alert('Masukkan ID Kunjungan yang valid (angka)');
+        return;
+      }
+
+      const valid = await validatePatient(emrPasien, type);
       if (!valid) return;
+
+      currentVisits[type] = idKunjungan;
 
       if (!navigator.bluetooth) {
         alert('Browser tidak mendukung Web Bluetooth API!\nGunakan Chrome, Edge, atau Opera.');
@@ -1150,9 +1129,11 @@ html, body {
     document.getElementById('form-glucose').addEventListener('submit', async (e) => {
       e.preventDefault();
       const value = measurementData.glucose;
-      const idPasien = currentPatients.glucose;
-      if (value && idPasien) {
-        const success = await sendToServer('glukosa', idPasien, value.toString());
+      const emrPasien = currentPatients.glucose;
+      const idKunjungan = currentVisits.glucose;
+      
+      if (value && emrPasien && idKunjungan) {
+        const success = await sendToServer('glukosa', emrPasien, idKunjungan, value.toString());
         if (success) {
           alert('Data Glukosa berhasil disimpan!');
           setTimeout(() => {
@@ -1162,15 +1143,19 @@ html, body {
             stopConnection('glucose');
           }, 500);
         }
+      } else {
+        alert('Data tidak lengkap!');
       }
     });
 
     document.getElementById('form-bp').addEventListener('submit', async (e) => {
       e.preventDefault();
       const value = measurementData.bp;
-      const idPasien = currentPatients.bp;
-      if (value && idPasien) {
-        const success = await sendToServer('tensimeter', idPasien, value);
+      const emrPasien = currentPatients.bp;
+      const idKunjungan = currentVisits.bp;
+      
+      if (value && emrPasien && idKunjungan) {
+        const success = await sendToServer('tensimeter', emrPasien, idKunjungan, value);
         if (success) {
           alert('Data Tekanan Darah berhasil disimpan!');
           setTimeout(() => {
@@ -1180,15 +1165,19 @@ html, body {
             stopConnection('bp');
           }, 500);
         }
+      } else {
+        alert('Data tidak lengkap!');
       }
     });
 
     document.getElementById('form-hr').addEventListener('submit', async (e) => {
       e.preventDefault();
       const value = measurementData.hr;
-      const idPasien = currentPatients.hr;
-      if (value && idPasien) {
-        const success = await sendToServer('heart_rate', idPasien, value.toString());
+      const emrPasien = currentPatients.hr;
+      const idKunjungan = currentVisits.hr;
+      
+      if (value && emrPasien && idKunjungan) {
+        const success = await sendToServer('heart_rate', emrPasien, idKunjungan, value.toString());
         if (success) {
           alert('Data Heart Rate berhasil disimpan!');
           setTimeout(() => {
@@ -1198,6 +1187,8 @@ html, body {
             stopConnection('hr');
           }, 500);
         }
+      } else {
+        alert('Data tidak lengkap!');
       }
     });
 
@@ -1206,11 +1197,12 @@ html, body {
       const weight = measurementData.weight;
       const bmi = measurementData.bmi;
       const height = measurementData.height;
-      const idPasien = currentPatients.weight;
+      const emrPasien = currentPatients.weight;
+      const idKunjungan = currentVisits.weight;
       
-      if (weight && idPasien) {
+      if (weight && emrPasien && idKunjungan) {
         const dataToSend = bmi ? `${weight}|BMI:${bmi}|Height:${height}` : weight.toString();
-        const success = await sendToServer('timbangan', idPasien, dataToSend);
+        const success = await sendToServer('timbangan', emrPasien, idKunjungan, dataToSend);
         if (success) {
           alert('Data Berat & BMI berhasil disimpan!');
           setTimeout(() => {
@@ -1221,6 +1213,8 @@ html, body {
             stopConnection('weight');
           }, 500);
         }
+      } else {
+        alert('Data tidak lengkap!');
       }
     });
 
@@ -1243,6 +1237,7 @@ html, body {
 
     // ==== INITIALIZATION ====
     addLog('Sistem Darsinurse Gateway siap digunakan', 'success');
+    addLog(`Login sebagai: <%= nama_perawat %> (EMR: <%= emr_perawat %>)`, 'success');
 
   </script>
 </body>
