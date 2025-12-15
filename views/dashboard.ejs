@@ -1194,17 +1194,21 @@ html, body {
 
     document.getElementById('form-weight').addEventListener('submit', async (e) => {
       e.preventDefault();
+
       const weight = measurementData.weight;
       const bmi = measurementData.bmi;
       const height = measurementData.height;
       const emrPasien = currentPatients.weight;
       const idKunjungan = currentVisits.weight;
-      
-      if (weight && emrPasien && idKunjungan) {
-        const dataToSend = bmi ? `${weight}|BMI:${bmi}|Height:${height}` : weight.toString();
-        const success = await sendToServer('timbangan', emrPasien, idKunjungan, dataToSend);
-        if (success) {
-          alert('Data Berat & BMI berhasil disimpan!');
+
+      if (weight && bmi && height && emrPasien && idKunjungan) {
+
+        const okWeight = await sendToServer('timbangan', emrPasien, idKunjungan, weight);
+        const okHeight = await sendToServer('tinggi', emrPasien, idKunjungan, height);
+        const okBmi    = await sendToServer('bmi', emrPasien, idKunjungan, bmi);
+
+        if (okWeight && okHeight && okBmi) {
+          alert('Data Berat, Tinggi, dan BMI berhasil disimpan!');
           setTimeout(() => {
             backToMenu();
             document.getElementById('weight-value').textContent = '-';
@@ -1213,10 +1217,12 @@ html, body {
             stopConnection('weight');
           }, 500);
         }
+
       } else {
         alert('Data tidak lengkap!');
       }
     });
+
 
     // ==== AUTO CALCULATE BMI ====
     document.getElementById('weight-height').addEventListener('input', function() {
