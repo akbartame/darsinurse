@@ -30,7 +30,7 @@ services:
       TZ: Asia/Jakarta
 
       # 🔐 METABASE EMBED
-      METABASE_URL: "http://darsinurse.hint-lab.id"
+      METABASE_URL: "https://darsinurse.hint-lab.id"
       METABASE_SECRET: "bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab"
 
     depends_on:

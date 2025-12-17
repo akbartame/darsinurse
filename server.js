@@ -798,7 +798,7 @@ const jwt = require('jsonwebtoken');
  * @returns {string} Signed embed URL
  */
 function getMetabaseEmbedUrl(dashboardId, params = {}) {
-  const METABASE_URL = process.env.METABASE_URL || 'http://darsinurse.hint-lab.id';
+  const METABASE_URL = process.env.METABASE_URL || 'https://darsinurse.hint-lab.id';
   const METABASE_SECRET = process.env.METABASE_SECRET || 'bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab';
   
   const payload = {
@@ -825,12 +825,8 @@ app.get('/admin/monitoring', requireAdmin, (req, res) => {
 
 // Route untuk perawat (jika ingin mereka juga bisa lihat monitoring)
 app.get('/monitoring', requireLogin, (req, res) => {
-  // Redirect perawat ke admin monitoring atau dashboard khusus
-  if (req.session.role === 'admin') {
-    return res.redirect('/admin/monitoring');
-  }
-  // Atau render dashboard monitoring untuk perawat (simplified version)
-  res.render('perawat-monitoring', {
+  // ✅ Semua user gunakan admin-monitoring
+  res.render('admin-monitoring', {
     nama_perawat: req.session.nama_perawat,
     emr_perawat: req.session.emr_perawat,
     role: req.session.role
