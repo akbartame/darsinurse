@@ -7,6 +7,10 @@
   <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Socket.IO Client -->
+  <script src="/socket.io/socket.io.js"></script>
+  
   <style>
     :root {
       --primary-green: #00B14F;
@@ -367,6 +371,159 @@
       color: #ddd;
     }
 
+    /* ============================================ */
+    /* FALL DETECTION ALERT STYLES */
+    /* ============================================ */
+    
+    .fall-alert-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 9999;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .fall-alert {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+      border: 3px solid #ff0000;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 10px 40px rgba(255, 0, 0, 0.4);
+      animation: slideInShake 0.6s ease-out;
+      position: relative;
+      color: white;
+    }
+
+    @keyframes slideInShake {
+      0% {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      50% {
+        transform: translateX(-20px);
+      }
+      75% {
+        transform: translateX(10px);
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+    }
+
+    .fall-alert-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .fall-alert-icon {
+      font-size: 36px;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+      }
+    }
+
+    .fall-alert-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .fall-alert-body {
+      margin-bottom: 15px;
+    }
+
+    .fall-alert-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .fall-alert-label {
+      font-weight: 600;
+      opacity: 0.9;
+    }
+
+    .fall-alert-value {
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .fall-alert-footer {
+      display: flex;
+      gap: 10px;
+    }
+
+    .fall-alert-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+    }
+
+    .btn-acknowledge {
+      background: white;
+      color: #ff6b6b;
+    }
+
+    .btn-acknowledge:hover {
+      background: #f0f0f0;
+      transform: translateY(-2px);
+    }
+
+    .btn-close {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-close:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .fall-alert-timestamp {
+      font-size: 11px;
+      opacity: 0.8;
+      text-align: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
     /* Footer */
     .footer {
       background: #2c3e50;
@@ -413,39 +570,53 @@
       .tab-navigation {
         flex-wrap: wrap;
       }
+
+      .fall-alert-container {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+      }
     }
   </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="top-header">
+  <!-- Fall Alert Sound -->
+  <audio id="fall-alert-sound" preload="auto">
+    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFAxMoOPsvmcfCDGJ0fHJeCkGI3fH8N2RQAoUXrTp66hVFAxMoOPsvmcfCDGJ0fHJeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkGI3fH8N+RQAoTXrTp66hWFAxMoOPsv2cfCDGJ0fHKeCkG" type="audio/wav">
+  </audio>
+
+  <!-- Fall Alert Container -->
+  <div class="fall-alert-container" id="fall-alert-container"></div>
+
+  <!-- Header -->
+  <header class="top-header">
     <div class="container-fluid">
-        <div class="header-content">
+      <div class="header-content">
         <div class="logo-section">
-            <i class="fas fa-chart-line"></i>
-            <h1>Darsinurse Admin</h1>
+          <i class="fas fa-chart-line"></i>
+          <h1>Darsinurse Admin</h1>
         </div>
 
         <div class="nav-section">
-            <span>
+          <span>
             <i class="fas fa-user-circle"></i> <%= nama_perawat %>
-            </span>
+          </span>
 
-            <% if (role === 'admin') { %>
-            <span>|</span>
-            <a href="/admin/manage-users">
-                <i class="fas fa-users"></i> Kelola User
-            </a>
-            <% } %>
+          <% if (role === 'admin') { %>
+          <span>|</span>
+          <a href="/admin/manage-users">
+            <i class="fas fa-users"></i> Kelola User
+          </a>
+          <% } %>
 
-            <span>|</span>
-            <a href="/logout" class="logout-btn" onclick="return confirm('Yakin logout?')">
+          <span>|</span>
+          <a href="/logout" class="logout-btn" onclick="return confirm('Yakin logout?')">
             <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
+          </a>
         </div>
-        </div>
+      </div>
     </div>
-    </header>
+  </header>
 
   <!-- Main Content -->
   <div class="container-fluid py-4 main-container">
@@ -584,6 +755,181 @@
   
   <script>
     // ============================================
+    // SOCKET.IO CLIENT - FALL DETECTION
+    // ============================================
+
+    // Initialize Socket.IO connection
+    const socket = io({
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    // Connection event handlers
+    socket.on('connect', () => {
+      console.log('✓ Socket.IO connected:', socket.id);
+      socket.emit('join-monitoring', { 
+        user: '<%= nama_perawat %>', 
+        role: '<%= role %>' 
+      });
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ Socket.IO disconnected');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('❌ Socket.IO connection error:', error);
+    });
+
+    // ============================================
+    // FALL ALERT HANDLER
+    // ============================================
+
+    socket.on('fall-alert', (alert) => {
+      console.log('🚨 FALL ALERT RECEIVED:', alert);
+      
+      // Play alert sound
+      playAlertSound();
+      
+      // Show alert notification
+      showFallAlert(alert);
+    });
+
+    // ============================================
+    // ALERT FUNCTIONS
+    // ============================================
+
+    function playAlertSound() {
+      const audio = document.getElementById('fall-alert-sound');
+      if (audio) {
+        // Play 3 times
+        let playCount = 0;
+        const maxPlays = 3;
+        
+        audio.play().catch(err => {
+          console.warn('⚠️ Audio autoplay blocked:', err);
+        });
+        
+        audio.onended = function() {
+          playCount++;
+          if (playCount < maxPlays) {
+            audio.play();
+          }
+        };
+      }
+    }
+
+    function showFallAlert(alert) {
+      const container = document.getElementById('fall-alert-container');
+      if (!container) return;
+      
+      const alertDiv = document.createElement('div');
+      alertDiv.className = 'fall-alert';
+      alertDiv.id = `fall-alert-${alert.id}`;
+      
+      const waktu = new Date(alert.waktu);
+      const waktuStr = waktu.toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      alertDiv.innerHTML = `
+        <div class="fall-alert-header">
+          <div class="fall-alert-icon">⚠️</div>
+          <h3 class="fall-alert-title">FALL DETECTED!</h3>
+        </div>
+        
+        <div class="fall-alert-body">
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">👤 Pasien:</span>
+            <span class="fall-alert-value">${alert.nama_pasien}</span>
+          </div>
+          
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">🏥 Ruangan:</span>
+            <span class="fall-alert-value">${alert.room_id}</span>
+          </div>
+          
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">📋 EMR:</span>
+            <span class="fall-alert-value">${alert.emr_no}</span>
+          </div>
+          
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">💓 Heart Rate:</span>
+            <span class="fall-alert-value">${alert.heart_rate || 'N/A'} bpm</span>
+          </div>
+          
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">🩺 Blood Pressure:</span>
+            <span class="fall-alert-value">${alert.blood_pressure || 'N/A'} mmHg</span>
+          </div>
+          
+          <div class="fall-alert-info">
+            <span class="fall-alert-label">🕐 Waktu:</span>
+            <span class="fall-alert-value">${waktuStr}</span>
+          </div>
+        </div>
+        
+        <div class="fall-alert-footer">
+          <button class="fall-alert-btn btn-acknowledge" onclick="acknowledgeFallAlert(${alert.id})">
+            ✓ Acknowledge
+          </button>
+          <button class="fall-alert-btn btn-close" onclick="closeFallAlert(${alert.id})">
+            ✕ Close
+          </button>
+        </div>
+        
+        <div class="fall-alert-timestamp">
+          Alert received at ${new Date().toLocaleTimeString('id-ID')}
+        </div>
+      `;
+      
+      container.insertBefore(alertDiv, container.firstChild);
+      
+      // Auto-close after 2 minutes
+      setTimeout(() => {
+        closeFallAlert(alert.id);
+      }, 120000);
+    }
+
+    function acknowledgeFallAlert(alertId) {
+      console.log('✓ Acknowledging alert:', alertId);
+      
+      fetch(`/api/fall-detection/${alertId}/acknowledge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          acknowledged_by: '<%= nama_perawat %>'
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          console.log('✓ Alert acknowledged:', data);
+          closeFallAlert(alertId);
+        }
+      })
+      .catch(err => {
+        console.error('❌ Acknowledge error:', err);
+      });
+    }
+
+    function closeFallAlert(alertId) {
+      const alertDiv = document.getElementById(`fall-alert-${alertId}`);
+      if (alertDiv) {
+        alertDiv.style.animation = 'slideOut 0.3s ease-in';
+        setTimeout(() => {
+          alertDiv.remove();
+        }, 300);
+      }
+    }
+
+    // ============================================
     // TAB NAVIGATION
     // ============================================
     document.querySelectorAll('.tab-button').forEach(button => {
@@ -608,7 +954,7 @@
     });
 
     // ============================================
-    // RAWAT JALAN DATA LOADING - FIXED VERSION
+    // RAWAT JALAN DATA LOADING
     // ============================================
     async function loadRawatJalanData() {
       try {
@@ -621,25 +967,18 @@
         console.log('📊 Stats data:', statsData);
         
         if (statsData.success) {
-          // ✅ FIX: Check if elements exist before setting textContent
           const totalVisitsEl = document.getElementById('total-visits');
           const totalMeasurementsEl = document.getElementById('total-measurements');
           
           if (totalVisitsEl) {
             totalVisitsEl.textContent = statsData.stats.totalVisits || 0;
             console.log('✓ Total visits updated:', statsData.stats.totalVisits);
-          } else {
-            console.error('❌ Element #total-visits not found');
           }
           
           if (totalMeasurementsEl) {
             totalMeasurementsEl.textContent = statsData.stats.totalMeasurements || 0;
             console.log('✓ Total measurements updated:', statsData.stats.totalMeasurements);
-          } else {
-            console.error('❌ Element #total-measurements not found');
           }
-        } else {
-          console.error('❌ Stats API returned error:', statsData.error);
         }
 
         // Load Visits
@@ -656,7 +995,7 @@
     }
 
     // ============================================
-    // LOAD VISITS TABLE - FIXED VERSION
+    // LOAD VISITS TABLE
     // ============================================
     async function loadVisitsData() {
       try {
@@ -692,8 +1031,6 @@
             `).join('');
             console.log('✓ Visits table updated with', visitsData.visits.length, 'records');
           }
-        } else {
-          console.error('❌ Visits API returned error:', visitsData.error);
         }
       } catch (err) {
         console.error('❌ Error loading visits:', err);
@@ -705,7 +1042,7 @@
     }
 
     // ============================================
-    // LOAD MEASUREMENTS TABLE - FIXED VERSION
+    // LOAD MEASUREMENTS TABLE
     // ============================================
     async function loadMeasurementsData() {
       try {
@@ -745,8 +1082,6 @@
             }).join('');
             console.log('✓ Measurements table updated with', measurementsData.measurements.length, 'records');
           }
-        } else {
-          console.error('❌ Measurements API returned error:', measurementsData.error);
         }
       } catch (err) {
         console.error('❌ Error loading measurements:', err);
@@ -803,13 +1138,13 @@
         `;
       }
     }
+
     // ============================================
-    // LOAD DATA ON PAGE LOAD - FIXED VERSION
+    // LOAD DATA ON PAGE LOAD
     // ============================================
     document.addEventListener('DOMContentLoaded', function() {
       console.log('✓ Page loaded, initializing data...');
       
-      // ✅ FIX: Verify all required elements exist before loading data
       const requiredElements = [
         'total-visits',
         'total-measurements',
@@ -830,12 +1165,13 @@
         loadRawatJalanData();
       } else {
         console.error('❌ Some required elements are missing, retrying...');
-        // Retry after a short delay
         setTimeout(() => {
           loadRawatJalanData();
         }, 500);
       }
     });
+
+    console.log('✓ Fall detection client initialized');
   </script>
 </body>
 </html>

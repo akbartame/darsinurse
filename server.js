@@ -11,7 +11,7 @@ const mysql = require('mysql2/promise');
 const path = require('path');
 const crypto = require('crypto');
 const http = require('http');
-
+const socketIo = require('socket.io');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -818,11 +818,173 @@ app.get('/logout', (req, res) => {
 /* ============================================================
    START HTTP SERVER
    ============================================================ */
-http.createServer(app).listen(PORT, () => {
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Socket.IO Connection Handler
+io.on('connection', (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id);
+  });
+  
+  socket.on('join-monitoring', (data) => {
+    socket.join('monitoring-room');
+    console.log('👀 Client joined monitoring room:', data);
+  });
+});
+// ============================================================
+// FALL DETECTION API
+// ============================================================
+// ============================================================
+// FALL DETECTION CHECKER (Polling setiap 10 detik)
+// ============================================================
+let lastCheckedId = 0;
+
+async function checkForNewFalls() {
+  try {
+    const conn = await pool.getConnection();
+    
+    const [newFalls] = await conn.query(`
+      SELECT 
+        v.id,
+        v.emr_no,
+        v.waktu,
+        v.fall_detected,
+        v.heart_rate,
+        v.sistolik,
+        v.diastolik,
+        p.nama as nama_pasien,
+        p.poli,
+        rd.room_id,
+        rd.device_id
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_pasien
+      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      WHERE v.fall_detected = 1 
+      AND v.id > ?
+      ORDER BY v.id DESC
+      LIMIT 10
+    `, [lastCheckedId]);
+    
+    conn.release();
+    
+    if (newFalls.length > 0) {
+      console.log('🚨 NEW FALL DETECTED:', newFalls.length, 'alert(s)');
+      
+      newFalls.forEach(fall => {
+        const alert = {
+          id: fall.id,
+          emr_no: fall.emr_no,
+          nama_pasien: fall.nama_pasien || `Pasien ${fall.emr_no}`,
+          room_id: fall.room_id || 'Unknown Room',
+          device_id: fall.device_id || 'Unknown Device',
+          waktu: fall.waktu,
+          heart_rate: fall.heart_rate,
+          blood_pressure: `${fall.sistolik}/${fall.diastolik}`,
+          poli: fall.poli || 'N/A',
+          timestamp: new Date().toISOString()
+        };
+        
+        io.to('monitoring-room').emit('fall-alert', alert);
+        console.log('📢 Fall alert emitted:', alert.nama_pasien, '-', alert.room_id);
+      });
+      
+      lastCheckedId = Math.max(...newFalls.map(f => f.id));
+    }
+    
+  } catch (err) {
+    console.error('❌ Fall detection check error:', err);
+  }
+}
+
+// Polling setiap 10 detik
+setInterval(checkForNewFalls, 10000);
+
+// Initialize on startup
+async function initFallDetection() {
+  try {
+    const conn = await pool.getConnection();
+    const [result] = await conn.query('SELECT MAX(id) as maxId FROM vitals WHERE fall_detected = 1');
+    conn.release();
+    
+    lastCheckedId = result[0].maxId || 0;
+    console.log('✓ Fall detection initialized. Last ID:', lastCheckedId);
+  } catch (err) {
+    console.error('❌ Fall detection init error:', err);
+  }
+}
+
+initFallDetection();
+
+// Get latest fall detections
+app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const [falls] = await conn.query(`
+      SELECT 
+        v.id,
+        v.emr_no,
+        v.waktu,
+        v.fall_detected,
+        v.heart_rate,
+        v.sistolik,
+        v.diastolik,
+        p.nama as nama_pasien,
+        p.poli,
+        rd.room_id,
+        rd.device_id
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_pasien
+      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      WHERE v.fall_detected = 1 
+      AND v.waktu >= ?
+      ORDER BY v.waktu DESC
+      LIMIT 50
+    `, [today]);
+    
+    conn.release();
+    res.json({ success: true, falls });
+  } catch (err) {
+    console.error('❌ Fall detection API error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// Acknowledge fall alert
+app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { acknowledged_by } = req.body;
+    
+    res.json({ 
+      success: true, 
+      message: 'Fall alert acknowledged',
+      acknowledged_by,
+      timestamp: new Date()
+    });
+  } catch (err) {
+    console.error('❌ Acknowledge error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Start server
+server.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║   DARSINURSE GATEWAY - RAWAT JALAN     ║
 ║   Server running on http://localhost:${PORT}  ║
+║   Socket.IO Fall Detection: ACTIVE     ║
 ╚════════════════════════════════════════╝
 `);
 });
