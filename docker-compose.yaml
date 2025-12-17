@@ -31,7 +31,7 @@ services:
 
       # 🔐 METABASE EMBED
       METABASE_URL: "https://darsinurse.hint-lab.id"
-      METABASE_SECRET: "bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab"
+      METABASE_SECRET: "a7dd79ccd6a69475c06533ca4d9ac152c443ed3c7550ec7be12ba06dd1b7ce55"
 
     depends_on:
       - darsinurse-db
