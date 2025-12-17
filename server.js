@@ -774,3 +774,352 @@ http.createServer(app).listen(PORT, () => {
 ╚════════════════════════════════════════╝
 `);
 });
+
+/* ============================================================
+   DARSINURSE GATEWAY - ADMIN MONITORING INTEGRATION
+   Add this code to your server.js
+   ============================================================ */
+
+// ============================================================
+// 1. INSTALL REQUIRED PACKAGE
+// ============================================================
+// Run: npm install jsonwebtoken
+
+const jwt = require('jsonwebtoken');
+
+// ============================================================
+// 2. ADD METABASE HELPER FUNCTION
+// ============================================================
+
+/**
+ * Generate Metabase Embed URL with JWT token
+ * @param {number} dashboardId - Metabase dashboard ID
+ * @param {object} params - Dashboard parameters (optional)
+ * @returns {string} Signed embed URL
+ */
+function getMetabaseEmbedUrl(dashboardId, params = {}) {
+  const METABASE_URL = process.env.METABASE_URL || 'http://darsinurse.hint-lab.id';
+  const METABASE_SECRET = process.env.METABASE_SECRET || 'bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab';
+  
+  const payload = {
+    resource: { dashboard: dashboardId },
+    params: params,
+    exp: Math.round(Date.now() / 1000) + (10 * 60) // Token expires in 10 minutes
+  };
+  
+  const token = jwt.sign(payload, METABASE_SECRET);
+  return `${METABASE_URL}/embed/dashboard/${token}#bordered=true&titled=true`;
+}
+
+// ============================================================
+// 3. ADD ADMIN MONITORING ROUTE (Page Render)
+// ============================================================
+
+app.get('/admin/monitoring', requireAdmin, async (req, res) => {
+  res.render('admin-monitoring', {
+    nama_perawat: req.session.nama_perawat,
+    emr_perawat: req.session.emr_perawat
+  });
+});
+
+// ============================================================
+// 4. ADD API ENDPOINTS FOR RAWAT JALAN DASHBOARD
+// ============================================================
+
+// API 1: Statistics Today (for stat cards)
+app.get('/api/statistics/today', requireAdmin, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    // Get today's date range (00:00:00 - 23:59:59)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    // Total visits today
+    const [visits] = await conn.query(
+      `SELECT COUNT(*) as total FROM kunjungan 
+       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`,
+      [today, tomorrow]
+    );
+    
+    // Total unique patients today
+    const [patients] = await conn.query(
+      `SELECT COUNT(DISTINCT emr_pasien) as total FROM kunjungan 
+       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`,
+      [today, tomorrow]
+    );
+    
+    // Total measurements today
+    const [measurements] = await conn.query(
+      `SELECT COUNT(*) as total FROM pengukuran 
+       WHERE timestamp >= ? AND timestamp < ?`,
+      [today, tomorrow]
+    );
+    
+    // Active visits (status = 'aktif')
+    const [active] = await conn.query(
+      `SELECT COUNT(*) as total FROM kunjungan 
+       WHERE status = 'aktif' AND tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`,
+      [today, tomorrow]
+    );
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      stats: {
+        totalVisits: visits[0].total,
+        totalPatients: patients[0].total,
+        totalMeasurements: measurements[0].total,
+        activeVisits: active[0].total
+      }
+    });
+  } catch (err) {
+    console.error('❌ Statistics API error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// API 2: Today's Visits (for visits table)
+app.get('/api/visits/today', requireAdmin, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const [visits] = await conn.query(
+      `SELECT 
+        k.id_kunjungan,
+        k.emr_pasien,
+        k.keluhan,
+        k.status,
+        k.tanggal_kunjungan,
+        p.nama as nama_pasien,
+        pr.nama as nama_perawat,
+        (SELECT COUNT(*) FROM pengukuran WHERE id_kunjungan = k.id_kunjungan) as total_measurements
+       FROM kunjungan k
+       JOIN pasien p ON k.emr_pasien = p.emr_pasien
+       JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
+       WHERE k.tanggal_kunjungan >= ? AND k.tanggal_kunjungan < ?
+       ORDER BY k.tanggal_kunjungan DESC`,
+      [today, tomorrow]
+    );
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      visits: visits
+    });
+  } catch (err) {
+    console.error('❌ Visits API error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// API 3: Today's Measurements (for measurements table)
+app.get('/api/measurements/today', requireAdmin, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const [measurements] = await conn.query(
+      `SELECT 
+        p.id,
+        p.tipe_device,
+        p.data,
+        p.timestamp,
+        pas.nama as nama_pasien,
+        pr.nama as nama_perawat
+       FROM pengukuran p
+       JOIN pasien pas ON p.emr_pasien = pas.emr_pasien
+       JOIN perawat pr ON p.emr_perawat = pr.emr_perawat
+       WHERE p.timestamp >= ? AND p.timestamp < ?
+       ORDER BY p.timestamp DESC
+       LIMIT 100`,
+      [today, tomorrow]
+    );
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      measurements: measurements
+    });
+  } catch (err) {
+    console.error('❌ Measurements API error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// API 4: Metabase Embed Token for Rawat Inap Dashboard
+app.get('/api/metabase/rawat-inap-token', requireAdmin, (req, res) => {
+  try {
+    // Dashboard ID untuk Rawat Inap - sesuaikan dengan ID di Metabase Anda
+    const DASHBOARD_ID = 1; // ⚠️ CHANGE THIS to your actual Metabase dashboard ID
+    
+    // Generate embed URL with JWT token
+    const embedUrl = getMetabaseEmbedUrl(DASHBOARD_ID);
+    
+    console.log('✓ Metabase embed URL generated for dashboard:', DASHBOARD_ID);
+    
+    res.json({
+      success: true,
+      embedUrl: embedUrl
+    });
+  } catch (err) {
+    console.error('❌ Metabase token error:', err);
+    res.status(500).json({ 
+      success: false,
+      error: 'Gagal generate Metabase token: ' + err.message 
+    });
+  }
+});
+
+// ============================================================
+// 5. OPTIONAL: Add navigation link in admin-users.ejs
+// ============================================================
+
+/*
+Add this link to your admin navigation menu:
+
+<a href="/admin/monitoring">
+  <i class="fas fa-chart-line"></i> Dashboard Monitoring
+</a>
+
+Example placement in header:
+
+<div class="nav-section">
+  <a href="/admin/monitoring">
+    <i class="fas fa-chart-line"></i> Monitoring
+  </a>
+  <span>|</span>
+  <a href="/admin/manage-users">
+    <i class="fas fa-users"></i> Kelola User
+  </a>
+  <span>|</span>
+  <a href="/logout" class="logout-btn">
+    <i class="fas fa-sign-out-alt"></i> Logout
+  </a>
+</div>
+*/
+
+// ============================================================
+// 6. UPDATE DOCKER COMPOSE (Already done, just verify)
+// ============================================================
+
+/*
+Ensure these environment variables are set in docker-compose.yml:
+
+services:
+  darsinurse-app:
+    environment:
+      METABASE_URL: "http://darsinurse.hint-lab.id"
+      METABASE_SECRET: "bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab"
+*/
+
+// ============================================================
+// 7. INSTALLATION STEPS
+// ============================================================
+
+/*
+STEP-BY-STEP INSTALLATION:
+
+1. Install jsonwebtoken package:
+   npm install jsonwebtoken
+
+2. Add all the code above to your server.js file
+   - Add after existing routes
+   - Before the "START HTTP SERVER" section
+
+3. Create/verify admin-monitoring.ejs exists in views folder
+
+4. Setup Metabase (if not already done):
+   a. Create a Metabase account at your METABASE_URL
+   b. Create a dashboard for "Rawat Inap"
+   c. Go to Dashboard → Sharing → Embed this dashboard
+   d. Enable embedding and get the dashboard ID
+   e. Update DASHBOARD_ID in the code above (line 140)
+
+5. Restart your application:
+   docker-compose down
+   docker-compose up -d --build
+
+6. Test the integration:
+   - Login as admin
+   - Go to http://localhost:4000/admin/monitoring
+   - Check if statistics load
+   - Check if visits table loads
+   - Check if measurements table loads
+   - Switch to "Rawat Inap" tab and verify Metabase loads
+
+TROUBLESHOOTING:
+
+- If stats show "-": Check if there's data in kunjungan table today
+- If tables show "Memuat data...": Check browser console for errors
+- If Metabase fails: Verify METABASE_URL and METABASE_SECRET are correct
+- If "Gagal memuat dashboard": Check dashboard ID and Metabase embedding is enabled
+*/
+
+// ============================================================
+// 8. METABASE SETUP GUIDE
+// ============================================================
+
+/*
+HOW TO SETUP METABASE EMBEDDING:
+
+1. Login to Metabase at http://darsinurse.hint-lab.id
+
+2. Create Dashboard:
+   - Click "+" → Dashboard
+   - Name it "Dashboard Rawat Inap"
+   - Add questions/cards (queries) to show:
+     * Total pasien rawat inap aktif
+     * Grafik vital signs (heart rate, blood pressure, etc)
+     * Bed occupancy rate
+     * Alert/emergency notifications
+     * Length of stay statistics
+
+3. Enable Embedding:
+   - Open the dashboard
+   - Click sharing icon (top right)
+   - Select "Embed this dashboard"
+   - Toggle "Enable embedding"
+   - Note the dashboard ID (number in URL)
+   - Copy the embedding secret key
+
+4. Configure Environment:
+   - Update docker-compose.yml with correct METABASE_SECRET
+   - Update DASHBOARD_ID in the code (line 140)
+
+5. Test Embedding:
+   - Generate JWT token using the getMetabaseEmbedUrl() function
+   - Open the URL in browser to verify it works
+   - Should show dashboard without Metabase navigation
+
+METABASE QUERY EXAMPLES:
+
+For "Total Pasien Rawat Inap Aktif":
+SELECT COUNT(*) as total 
+FROM rawat_inap 
+WHERE status = 'aktif'
+
+For "Vital Signs Chart":
+SELECT timestamp, pasien_id, heart_rate, blood_pressure
+FROM monitoring_vital_signs
+WHERE timestamp >= NOW() - INTERVAL 24 HOUR
+ORDER BY timestamp DESC
+*/
+
+console.log('✓ Admin Monitoring Integration Code Ready');
+console.log('ℹ️  Remember to install: npm install jsonwebtoken');
+console.log('ℹ️  Remember to update DASHBOARD_ID for Metabase (line 140)');

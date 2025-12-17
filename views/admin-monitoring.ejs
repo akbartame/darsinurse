@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darsinurse Admin - Dashboard Monitoring</title>
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary-green: #00B14F;
+      --secondary-green: #008a3d;
+      --primary-blue: #0056b3;
+      --primary-dark: #003d7a;
+      --secondary-teal: #20c997;
+      --light-bg: #f0f8f7;
+      --dark-text: #1a3a3a;
+      --gray-border: #e0e0e0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--dark-text);
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .top-header {
+      background: white;
+      padding: 1rem 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-section i {
+      font-size: 28px;
+      color: var(--primary-green);
+    }
+
+    .logo-section h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin: 0;
+    }
+
+    .nav-section {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 14px;
+    }
+
+    .nav-section a {
+      color: var(--primary-blue);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .nav-section a:hover {
+      color: var(--primary-dark);
+    }
+
+    .logout-btn {
+      color: #dc3545 !important;
+    }
+
+    .logout-btn:hover {
+      color: #c82333 !important;
+    }
+
+    /* Main Container */
+    .main-container {
+      padding-top: 100px !important;
+      flex: 1;
+    }
+
+    .page-header {
+      margin-bottom: 30px;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin-bottom: 8px;
+    }
+
+    .page-subtitle {
+      font-size: 16px;
+      color: #666;
+    }
+
+    /* Tab Navigation */
+    .tab-navigation {
+      display: flex;
+      gap: 20px;
+      border-bottom: 2px solid var(--gray-border);
+      margin-bottom: 30px;
+    }
+
+    .tab-button {
+      background: none;
+      border: none;
+      padding: 12px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+    }
+
+    .tab-button:hover {
+      color: var(--primary-green);
+    }
+
+    .tab-button.active {
+      color: var(--primary-green);
+      border-bottom-color: var(--primary-green);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      transition: all 0.3s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .stat-number {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--primary-green);
+      margin-bottom: 4px;
+    }
+
+    .stat-change {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .stat-icon {
+      float: right;
+      font-size: 32px;
+      color: rgba(0, 177, 79, 0.2);
+    }
+
+    /* Data Table */
+    .data-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    .data-header {
+      background: linear-gradient(135deg, var(--primary-green), var(--secondary-green));
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .data-header h3 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .data-body {
+      padding: 20px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .data-table thead {
+      background: #f9f9f9;
+      border-bottom: 2px solid var(--gray-border);
+    }
+
+    .data-table th {
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--dark-text);
+    }
+
+    .data-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--gray-border);
+    }
+
+    .data-table tbody tr:hover {
+      background: #f9f9f9;
+    }
+
+    .badge-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-aktif {
+      background: #e6f9e6;
+      color: #28a745;
+    }
+
+    .badge-selesai {
+      background: #e7f3ff;
+      color: var(--primary-blue);
+    }
+
+    /* Metabase Container */
+    .metabase-container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    .metabase-header {
+      background: linear-gradient(135deg, var(--primary-blue), var(--primary-dark));
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .metabase-iframe {
+      width: 100%;
+      border: none;
+      min-height: 800px;
+    }
+
+    .loading-spinner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 400px;
+      gap: 15px;
+      color: var(--primary-green);
+    }
+
+    .loading-spinner i {
+      font-size: 48px;
+      animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .refresh-btn {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.5);
+      color: white;
+      padding: 8px 15px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      font-weight: 600;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(255,255,255,0.3);
+      color: white;
+    }
+
+    .info-box {
+      background: #f0f8f7;
+      border-left: 4px solid var(--secondary-teal);
+      padding: 15px 20px;
+      margin-top: 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .info-box i {
+      color: var(--secondary-teal);
+      margin-right: 8px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #999;
+    }
+
+    .empty-state i {
+      font-size: 48px;
+      margin-bottom: 15px;
+      color: #ddd;
+    }
+
+    /* Footer */
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+      margin-top: auto;
+    }
+
+    .footer p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    @media (max-width: 768px) {
+      .header-content {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+      }
+
+      .nav-section {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .page-title {
+        font-size: 24px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metabase-iframe {
+        min-height: 500px;
+      }
+
+      .data-body {
+        max-height: 400px;
+      }
+
+      .tab-navigation {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="top-header">
+    <div class="container-fluid">
+      <div class="header-content">
+        <div class="logo-section">
+          <i class="fas fa-chart-line"></i>
+          <h1>Darsinurse Admin</h1>
+        </div>
+        <div class="nav-section">
+          <span><i class="fas fa-user-circle"></i> <%= nama_perawat %></span>
+          <span>|</span>
+          <a href="/admin/manage-users"><i class="fas fa-users"></i> Kelola User</a>
+          <span>|</span>
+          <a href="/logout" class="logout-btn" onclick="return confirm('Yakin logout?')">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container-fluid py-4 main-container">
+    <!-- Page Header -->
+    <div class="page-header">
+      <h2 class="page-title"><i class="fas fa-chart-bar"></i> Dashboard Monitoring</h2>
+      <p class="page-subtitle">Pantau data pasien rawat jalan dan rawat inap secara real-time</p>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+      <button class="tab-button active" data-tab="rawat-jalan">
+        <i class="fas fa-hospital-user"></i> Rawat Jalan
+      </button>
+      <button class="tab-button" data-tab="rawat-inap">
+        <i class="fas fa-bed"></i> Rawat Inap
+      </button>
+    </div>
+
+    <!-- TAB 1: RAWAT JALAN (Custom Dashboard) -->
+    <div id="rawat-jalan" class="tab-content active">
+      <!-- Statistics Cards -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon"><i class="fas fa-users"></i></div>
+          <div class="stat-label">Total Kunjungan Hari Ini</div>
+          <div class="stat-number" id="total-visits">-</div>
+          <div class="stat-change">Pasien</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon"><i class="fas fa-user"></i></div>
+          <div class="stat-label">Total Pasien Unik</div>
+          <div class="stat-number" id="total-patients">-</div>
+          <div class="stat-change">Orang</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon"><i class="fas fa-heartbeat"></i></div>
+          <div class="stat-label">Total Pengukuran</div>
+          <div class="stat-number" id="total-measurements">-</div>
+          <div class="stat-change">Data</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon"><i class="fas fa-clock"></i></div>
+          <div class="stat-label">Kunjungan Aktif</div>
+          <div class="stat-number" id="active-visits">-</div>
+          <div class="stat-change">Sedang berlangsung</div>
+        </div>
+      </div>
+
+      <!-- Visits Table -->
+      <div class="data-container" style="margin-bottom: 30px;">
+        <div class="data-header">
+          <h3><i class="fas fa-list"></i> Daftar Kunjungan Hari Ini</h3>
+          <button class="refresh-btn" onclick="loadRawatJalanData()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
+            <i class="fas fa-sync"></i> Refresh
+          </button>
+        </div>
+        <div class="data-body">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID Kunjungan</th>
+                <th>Nama Pasien</th>
+                <th>EMR</th>
+                <th>Keluhan</th>
+                <th>Perawat</th>
+                <th>Status</th>
+                <th>Pengukuran</th>
+              </tr>
+            </thead>
+            <tbody id="visits-table-body">
+              <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                  <i class="fas fa-spinner fa-spin"></i> Memuat data...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Measurements Table -->
+      <div class="data-container">
+        <div class="data-header">
+          <h3><i class="fas fa-heartbeat"></i> Data Pengukuran Hari Ini</h3>
+          <button class="refresh-btn" onclick="loadMeasurementsData()" style="background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.5); color: white; padding: 8px 15px; border-radius: 6px; cursor: pointer;">
+            <i class="fas fa-sync"></i> Refresh
+          </button>
+        </div>
+        <div class="data-body">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Pasien</th>
+                <th>Jenis Pengukuran</th>
+                <th>Nilai</th>
+                <th>Perawat</th>
+              </tr>
+            </thead>
+            <tbody id="measurements-table-body">
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">
+                  <i class="fas fa-spinner fa-spin"></i> Memuat data...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="info-box">
+        <i class="fas fa-info-circle"></i>
+        <strong>Informasi:</strong> Dashboard ini menampilkan data real-time kunjungan rawat jalan dan pengukuran vital sign dari semua pasien yang berkunjung hari ini.
+      </div>
+    </div>
+
+    <!-- TAB 2: RAWAT INAP (Metabase Embed) -->
+    <div id="rawat-inap" class="tab-content">
+      <div class="metabase-container">
+        <div class="metabase-header">
+          <h3><i class="fas fa-bed"></i> Dashboard Rawat Inap - Metabase</h3>
+          <button class="refresh-btn" onclick="loadMetabaseDashboard()">
+            <i class="fas fa-sync"></i> Refresh
+          </button>
+        </div>
+        <div id="metabase-loading" class="loading-spinner" style="display:flex;">
+          <i class="fas fa-spinner"></i>
+          <span>Memuat dashboard Metabase...</span>
+        </div>
+        <iframe 
+          id="metabase-iframe" 
+          class="metabase-iframe"
+          style="display:none;"
+          title="Darsinurse - Dashboard Rawat Inap"
+        ></iframe>
+      </div>
+
+      <div class="info-box">
+        <i class="fas fa-info-circle"></i>
+        <strong>Informasi:</strong> Dashboard ini menampilkan data real-time pasien rawat inap termasuk monitoring vital sign kontinyu, bed management, dan status medical alerts.
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2025 Darsinurse Gateway - Medical IoT Platform. All rights reserved.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    // ============================================
+    // TAB NAVIGATION
+    // ============================================
+    document.querySelectorAll('.tab-button').forEach(button => {
+      button.addEventListener('click', function() {
+        const tabName = this.dataset.tab;
+        
+        // Deactivate all tabs
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        
+        // Activate selected tab
+        this.classList.add('active');
+        document.getElementById(tabName).classList.add('active');
+        
+        // Load data when tab changes
+        if (tabName === 'rawat-jalan') {
+          loadRawatJalanData();
+        } else if (tabName === 'rawat-inap') {
+          loadMetabaseDashboard();
+        }
+      });
+    });
+
+    // ============================================
+    // RAWAT JALAN DATA LOADING
+    // ============================================
+    async function loadRawatJalanData() {
+      try {
+        // Load Statistics
+        const statsResponse = await fetch('/api/statistics/today');
+        const statsData = await statsResponse.json();
+        
+        if (statsData.success) {
+          document.getElementById('total-visits').textContent = statsData.stats.totalVisits;
+          document.getElementById('total-patients').textContent = statsData.stats.totalPatients;
+          document.getElementById('total-measurements').textContent = statsData.stats.totalMeasurements;
+          document.getElementById('active-visits').textContent = statsData.stats.activeVisits;
+        }
+
+        // Load Visits
+        const visitsResponse = await fetch('/api/visits/today');
+        const visitsData = await visitsResponse.json();
+        
+        if (visitsData.success) {
+          const tbody = document.getElementById('visits-table-body');
+          
+          if (visitsData.visits.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data kunjungan hari ini</td></tr>';
+          } else {
+            tbody.innerHTML = visitsData.visits.map(visit => `
+              <tr>
+                <td><strong>${visit.id_kunjungan}</strong></td>
+                <td>${visit.nama_pasien}</td>
+                <td>${visit.emr_pasien}</td>
+                <td>${visit.keluhan || '-'}</td>
+                <td>${visit.nama_perawat}</td>
+                <td><span class="badge-status badge-${visit.status}">${visit.status === 'aktif' ? 'Aktif' : 'Selesai'}</span></td>
+                <td><span class="badge bg-info">${visit.total_measurements} data</span></td>
+              </tr>
+            `).join('');
+          }
+        }
+
+        // Load Measurements
+        const measurementsResponse = await fetch('/api/measurements/today');
+        const measurementsData = await measurementsResponse.json();
+        
+        if (measurementsData.success) {
+          const tbody = document.getElementById('measurements-table-body');
+          
+          if (measurementsData.measurements.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Tidak ada pengukuran hari ini</td></tr>';
+          } else {
+            tbody.innerHTML = measurementsData.measurements.map(m => `
+              <tr>
+                <td>${new Date(m.timestamp).toLocaleTimeString('id-ID')}</td>
+                <td>${m.nama_pasien}</td>
+                <td><span class="badge bg-success">${m.tipe_device}</span></td>
+                <td><strong>${m.data}</strong></td>
+                <td>${m.nama_perawat}</td>
+              </tr>
+            `).join('');
+          }
+        }
+      } catch (err) {
+        console.error('Error loading data:', err);
+        alert('Gagal memuat data: ' + err.message);
+      }
+    }
+
+    // ============================================
+    // METABASE DASHBOARD LOADING
+    // ============================================
+    async function loadMetabaseDashboard() {
+      const loadingDiv = document.getElementById('metabase-loading');
+      const iframe = document.getElementById('metabase-iframe');
+      
+      loadingDiv.style.display = 'flex';
+      iframe.style.display = 'none';
+      
+      try {
+        const response = await fetch('/api/metabase/rawat-inap-token');
+        const data = await response.json();
+        
+        if (data.success && data.embedUrl) {
+          iframe.src = data.embedUrl;
+          iframe.style.display = 'block';
+          loadingDiv.style.display = 'none';
+          console.log('✓ Metabase dashboard loaded');
+        } else {
+          throw new Error(data.error || 'Gagal memuat dashboard');
+        }
+      } catch (err) {
+        console.error('Error loading Metabase:', err);
+        loadingDiv.innerHTML = `
+          <div style="text-align: center; color: #dc3545;">
+            <i class="fas fa-exclamation-circle" style="font-size: 48px; margin-bottom: 15px;"></i>
+            <p><strong>Gagal memuat dashboard</strong></p>
+            <p>${err.message}</p>
+            <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary" style="margin-top: 10px;">
+              <i class="fas fa-sync"></i> Coba Lagi
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    // ============================================
+    // LOAD DATA ON PAGE LOAD
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+      loadRawatJalanData();
+    });
+
+    // Auto-refresh setiap 5 menit
+    setInterval(() => {
+      const activeTab = document.querySelector('.tab-button.active');
+      if (activeTab && activeTab.dataset.tab === 'rawat-jalan') {
+        loadRawatJalanData();
+      }
+    }, 5 * 60 * 1000);
+  </script>
+</body>
+</html>

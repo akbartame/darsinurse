@@ -13,7 +13,7 @@ services:
     command: --default-authentication-plugin=mysql_native_password --default-time-zone='+07:00'
     volumes:
       - darsinurse_mysql_data:/var/lib/mysql
-      - /etc/localtime:/etc/localtime:ro  # sinkron waktu dengan host
+      - /etc/localtime:/etc/localtime:ro
     ports:
       - "3306:3306"
 
@@ -27,7 +27,12 @@ services:
       DB_USER: darsinurse
       DB_PASSWORD: darsinurse123
       DB_NAME: darsinurse
-      TZ: Asia/Jakarta               # timezone untuk app container
+      TZ: Asia/Jakarta
+
+      # 🔐 METABASE EMBED
+      METABASE_URL: "http://darsinurse.hint-lab.id"
+      METABASE_SECRET: "bcc00420636e39862522e5c622fd729a8662297b98235591411c279ef10ff0ab"
+
     depends_on:
       - darsinurse-db
     volumes:
