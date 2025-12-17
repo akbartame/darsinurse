@@ -804,7 +804,7 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
   const payload = {
     resource: { dashboard: dashboardId },
     params: params,
-    exp: Math.round(Date.now() / 1000) + (10 * 60) // Token expires in 10 minutes
+    exp: Math.round(Date.now() / 1000) + (10 * 60)
   };
   
   const token = jwt.sign(payload, METABASE_SECRET);
