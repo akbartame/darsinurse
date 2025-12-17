@@ -815,12 +815,28 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
 // 3. ADD ADMIN MONITORING ROUTE (Page Render)
 // ============================================================
 
-app.get('/admin/monitoring', requireAdmin, async (req, res) => {
+app.get('/admin/monitoring', requireAdmin, (req, res) => {
   res.render('admin-monitoring', {
     nama_perawat: req.session.nama_perawat,
-    emr_perawat: req.session.emr_perawat
+    emr_perawat: req.session.emr_perawat,
+    role: req.session.role
   });
 });
+
+// Route untuk perawat (jika ingin mereka juga bisa lihat monitoring)
+app.get('/monitoring', requireLogin, (req, res) => {
+  // Redirect perawat ke admin monitoring atau dashboard khusus
+  if (req.session.role === 'admin') {
+    return res.redirect('/admin/monitoring');
+  }
+  // Atau render dashboard monitoring untuk perawat (simplified version)
+  res.render('perawat-monitoring', {
+    nama_perawat: req.session.nama_perawat,
+    emr_perawat: req.session.emr_perawat,
+    role: req.session.role
+  });
+});
+
 
 // ============================================================
 // 4. ADD API ENDPOINTS FOR RAWAT JALAN DASHBOARD
