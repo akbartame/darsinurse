@@ -640,8 +640,72 @@ app.put('/api/visits/:id_kunjungan/status', requireLogin, async (req, res) => {
 });
 
 // ========== PENGUKURAN ROUTES ==========
+/* ============================================================
+   DARSINURSE - VITALS INTEGRATION COMPLETE
+   Tambahkan kode ini ke server.js Anda
+   Letakkan SEBELUM routes "/simpan_data"
+   ============================================================ */
 
-// SIMPAN DATA PENGUKURAN
+// ==== FUNCTION: Save to Vitals Table ====
+async function saveToVitals(conn, data) {
+  const {
+    emr_pasien,
+    id_kunjungan,
+    emr_perawat,
+    heart_rate,
+    respirasi,
+    glukosa,
+    berat_badan_kg,
+    tinggi_badan_cm,
+    bmi,
+    sistolik,
+    diastolik,
+    jarak_kasur_cm,
+    fall_detected
+  } = data;
+
+  const [result] = await conn.query(
+    `INSERT INTO vitals (
+      emr_no, 
+      id_kunjungan,
+      emr_perawat,
+      waktu,
+      heart_rate, 
+      sistolik, 
+      diastolik,
+      respirasi, 
+      glukosa, 
+      berat_badan_kg, 
+      tinggi_badan_cm,
+      bmi,
+      jarak_kasur_cm,
+      fall_detected
+    ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      emr_pasien,
+      id_kunjungan || null,
+      emr_perawat || null,
+      heart_rate || null,
+      sistolik || null,
+      diastolik || null,
+      respirasi || null,
+      glukosa || null,
+      berat_badan_kg || null,
+      tinggi_badan_cm || null,
+      bmi || null,
+      jarak_kasur_cm || null,
+      fall_detected || 0
+    ]
+  );
+
+  return result.insertId;
+}
+
+/* ============================================================
+   GANTI ENDPOINT /simpan_data yang ADA dengan KODE INI
+   ============================================================ */
+
+// SIMPAN DATA PENGUKURAN (UPDATED - Save to BOTH tables)
 app.post('/simpan_data', requireLogin, async (req, res) => {
   const { id_kunjungan, emr_pasien, tipe_device, data } = req.body;
   
@@ -654,27 +718,117 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
 
   try {
     const conn = await pool.getConnection();
-    const [result] = await conn.query(
+    
+    // Prepare vitals data
+    let vitalsData = {
+      emr_pasien: emrInt,
+      id_kunjungan: idInt,
+      emr_perawat: req.session.emr_perawat
+    };
+
+    // ✅ Map device type ke kolom vitals
+    switch(tipe_device.toLowerCase()) {
+      case 'glukosa':
+      case 'glucose':
+        vitalsData.glukosa = parseInt(data);
+        break;
+      
+      case 'tensimeter':
+      case 'blood_pressure':
+      case 'bp':
+        const bpMatch = data.match(/(\d+)\/(\d+)/);
+        if (bpMatch) {
+          vitalsData.sistolik = parseInt(bpMatch[1]);
+          vitalsData.diastolik = parseInt(bpMatch[2]);
+        }
+        break;
+      
+      case 'heart_rate':
+      case 'heartrate':
+      case 'pulse':
+        vitalsData.heart_rate = parseInt(data);
+        break;
+      
+      case 'timbangan':
+      case 'weight':
+      case 'berat_badan':
+        vitalsData.berat_badan_kg = parseFloat(data);
+        break;
+      
+      case 'tinggi':
+      case 'height':
+      case 'tinggi_badan':
+        vitalsData.tinggi_badan_cm = parseInt(data);
+        break;
+      
+      case 'bmi':
+        vitalsData.bmi = parseFloat(data);
+        break;
+      
+      case 'respirasi':
+      case 'respiration':
+      case 'respiratory_rate':
+        vitalsData.respirasi = parseInt(data);
+        break;
+      
+      case 'jarak_kasur':
+      case 'distance':
+      case 'bed_distance':
+        vitalsData.jarak_kasur_cm = parseInt(data);
+        break;
+      
+      case 'fall':
+      case 'fall_detection':
+        vitalsData.fall_detected = 1;
+        try {
+          const fallData = JSON.parse(data);
+          if (fallData.heart_rate) vitalsData.heart_rate = parseInt(fallData.heart_rate);
+          if (fallData.sistolik) vitalsData.sistolik = parseInt(fallData.sistolik);
+          if (fallData.diastolik) vitalsData.diastolik = parseInt(fallData.diastolik);
+        } catch (e) {
+          // data bukan JSON
+        }
+        break;
+      
+      default:
+        console.warn('⚠️ Unknown device type:', tipe_device);
+    }
+
+    // ✅ Save to vitals table
+    let vitalsId = null;
+    if (Object.keys(vitalsData).length > 3) {
+      vitalsId = await saveToVitals(conn, vitalsData);
+      console.log('✓ Data saved to vitals:', vitalsId, vitalsData);
+    }
+
+    // ✅ Save to pengukuran table (backward compatibility)
+    const [pengukuranResult] = await conn.query(
       `INSERT INTO pengukuran (id_kunjungan, emr_perawat, emr_pasien, tipe_device, data)
        VALUES (?, ?, ?, ?, ?)`,
       [idInt, req.session.emr_perawat, emrInt, tipe_device, data]
     );
+
     conn.release();
 
-    console.log('✓ Measurement saved:', result.insertId);
+    console.log('✓ Measurement saved - Pengukuran ID:', pengukuranResult.insertId, '| Vitals ID:', vitalsId);
     res.json({
       success: true,
-      id: result.insertId,
-      message: "Data pengukuran berhasil disimpan"
+      pengukuran_id: pengukuranResult.insertId,
+      vitals_id: vitalsId,
+      message: "Data berhasil disimpan"
     });
   } catch (err) {
-    console.error('❌ Save measurement error:', err);
+    console.error('❌ Save data error:', err);
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
 
-// RIWAYAT PENGUKURAN BERDASARKAN KUNJUNGAN
-app.get('/riwayat/kunjungan/:id_kunjungan', requireLogin, async (req, res) => {
+/* ============================================================
+   TAMBAHKAN API ENDPOINTS BARU (Letakkan sebelum server.listen)
+   ============================================================ */
+
+// ==== API: Get Vitals by Visit ====
+app.get('/api/vitals/kunjungan/:id_kunjungan', requireLogin, async (req, res) => {
   const idInt = parseInt(req.params.id_kunjungan);
   if (isNaN(idInt)) {
     return res.status(400).json({ error: 'ID Kunjungan tidak valid' });
@@ -683,7 +837,6 @@ app.get('/riwayat/kunjungan/:id_kunjungan', requireLogin, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     
-    // ✅ PERBAIKAN: Cek apakah perawat berhak akses kunjungan ini
     if (req.session.role !== 'admin') {
       const [checkAccess] = await conn.query(
         'SELECT id_kunjungan FROM kunjungan WHERE id_kunjungan = ? AND emr_perawat = ?',
@@ -698,25 +851,30 @@ app.get('/riwayat/kunjungan/:id_kunjungan', requireLogin, async (req, res) => {
       }
     }
     
-    const [rows] = await conn.query(
-      `SELECT p.*, pr.nama as nama_perawat
-       FROM pengukuran p
-       JOIN perawat pr ON p.emr_perawat = pr.emr_perawat
-       WHERE p.id_kunjungan = ?
-       ORDER BY p.timestamp DESC`,
+    const [vitals] = await conn.query(
+      `SELECT 
+        v.*,
+        pr.nama as nama_perawat,
+        p.nama as nama_pasien
+       FROM vitals v
+       LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
+       LEFT JOIN pasien p ON v.emr_no = p.emr_pasien
+       WHERE v.id_kunjungan = ?
+       ORDER BY v.waktu DESC`,
       [idInt]
     );
+    
     conn.release();
 
-    res.json({ success: true, data: rows });
+    res.json({ success: true, vitals });
   } catch (err) {
-    console.error('❌ Get visit measurements error:', err);
+    console.error('❌ Get vitals error:', err);
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
 
-// RIWAYAT PENGUKURAN BERDASARKAN PASIEN
-app.get('/riwayat/pasien/:emr', requireLogin, async (req, res) => {
+// ==== API: Get Vitals by Patient ====
+app.get('/api/vitals/pasien/:emr', requireLogin, async (req, res) => {
   const emrInt = parseInt(req.params.emr);
   if (isNaN(emrInt)) {
     return res.status(400).json({ error: 'EMR tidak valid' });
@@ -725,34 +883,200 @@ app.get('/riwayat/pasien/:emr', requireLogin, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     
-    // ✅ PERBAIKAN: Filter berdasarkan role
     let query = `
-      SELECT p.*, pr.nama as nama_perawat, k.id_kunjungan
-      FROM pengukuran p
-      JOIN perawat pr ON p.emr_perawat = pr.emr_perawat
-      JOIN kunjungan k ON p.id_kunjungan = k.id_kunjungan
-      WHERE p.emr_pasien = ?
+      SELECT 
+        v.*,
+        pr.nama as nama_perawat,
+        p.nama as nama_pasien,
+        k.keluhan
+      FROM vitals v
+      LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
+      LEFT JOIN pasien p ON v.emr_no = p.emr_pasien
+      LEFT JOIN kunjungan k ON v.id_kunjungan = k.id_kunjungan
+      WHERE v.emr_no = ?
     `;
     
     const params = [emrInt];
     
-    // Jika bukan admin, hanya tampilkan pengukuran dari kunjungan yang ditangani perawat ini
     if (req.session.role !== 'admin') {
-      query += ` AND k.emr_perawat = ?`;
-      params.push(req.session.emr_perawat);
+      query += ` AND (k.emr_perawat = ? OR v.emr_perawat = ?)`;
+      params.push(req.session.emr_perawat, req.session.emr_perawat);
     }
     
-    query += ` ORDER BY p.timestamp DESC LIMIT 100`;
+    query += ` ORDER BY v.waktu DESC LIMIT 100`;
     
-    const [rows] = await conn.query(query, params);
+    const [vitals] = await conn.query(query, params);
     conn.release();
 
-    res.json({ success: true, data: rows });
+    res.json({ success: true, vitals });
   } catch (err) {
-    console.error('❌ Get patient measurements error:', err);
+    console.error('❌ Get vitals error:', err);
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
+
+// ==== API: Get Latest Vitals Summary ====
+app.get('/api/vitals/pasien/:emr/latest', requireLogin, async (req, res) => {
+  const emrInt = parseInt(req.params.emr);
+  if (isNaN(emrInt)) {
+    return res.status(400).json({ error: 'EMR tidak valid' });
+  }
+  
+  try {
+    const conn = await pool.getConnection();
+    
+    const [latestVitals] = await conn.query(
+      `SELECT 
+        (SELECT heart_rate FROM vitals WHERE emr_no = ? AND heart_rate IS NOT NULL ORDER BY waktu DESC LIMIT 1) as heart_rate,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND heart_rate IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_hr_time,
+        
+        (SELECT glukosa FROM vitals WHERE emr_no = ? AND glukosa IS NOT NULL ORDER BY waktu DESC LIMIT 1) as glukosa,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND glukosa IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_glukosa_time,
+        
+        (SELECT sistolik FROM vitals WHERE emr_no = ? AND sistolik IS NOT NULL ORDER BY waktu DESC LIMIT 1) as sistolik,
+        (SELECT diastolik FROM vitals WHERE emr_no = ? AND diastolik IS NOT NULL ORDER BY waktu DESC LIMIT 1) as diastolik,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND sistolik IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_bp_time,
+        
+        (SELECT berat_badan_kg FROM vitals WHERE emr_no = ? AND berat_badan_kg IS NOT NULL ORDER BY waktu DESC LIMIT 1) as berat_badan_kg,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND berat_badan_kg IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_weight_time,
+        
+        (SELECT tinggi_badan_cm FROM vitals WHERE emr_no = ? AND tinggi_badan_cm IS NOT NULL ORDER BY waktu DESC LIMIT 1) as tinggi_badan_cm,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND tinggi_badan_cm IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_height_time,
+        
+        (SELECT bmi FROM vitals WHERE emr_no = ? AND bmi IS NOT NULL ORDER BY waktu DESC LIMIT 1) as bmi,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND bmi IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_bmi_time,
+        
+        (SELECT respirasi FROM vitals WHERE emr_no = ? AND respirasi IS NOT NULL ORDER BY waktu DESC LIMIT 1) as respirasi,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND respirasi IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_respirasi_time,
+        
+        (SELECT jarak_kasur_cm FROM vitals WHERE emr_no = ? AND jarak_kasur_cm IS NOT NULL ORDER BY waktu DESC LIMIT 1) as jarak_kasur_cm,
+        (SELECT waktu FROM vitals WHERE emr_no = ? AND jarak_kasur_cm IS NOT NULL ORDER BY waktu DESC LIMIT 1) as last_jarak_time`,
+      [emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt, emrInt]
+    );
+    
+    conn.release();
+
+    res.json({ 
+      success: true, 
+      latest: latestVitals[0] 
+    });
+  } catch (err) {
+    console.error('❌ Get latest vitals error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// ==== API: Get Vitals Statistics ====
+app.get('/api/vitals/statistics/today', requireAdminOrPerawat, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const whereClause = req.session.role === 'admin' 
+      ? '' 
+      : `AND emr_perawat = ${req.session.emr_perawat}`;
+    
+    const [stats] = await conn.query(
+      `SELECT 
+        COUNT(*) as total_measurements,
+        COUNT(DISTINCT emr_no) as total_patients,
+        SUM(CASE WHEN heart_rate IS NOT NULL THEN 1 ELSE 0 END) as heart_rate_count,
+        SUM(CASE WHEN glukosa IS NOT NULL THEN 1 ELSE 0 END) as glukosa_count,
+        SUM(CASE WHEN sistolik IS NOT NULL THEN 1 ELSE 0 END) as blood_pressure_count,
+        SUM(CASE WHEN berat_badan_kg IS NOT NULL THEN 1 ELSE 0 END) as weight_count,
+        SUM(CASE WHEN tinggi_badan_cm IS NOT NULL THEN 1 ELSE 0 END) as height_count,
+        SUM(CASE WHEN bmi IS NOT NULL THEN 1 ELSE 0 END) as bmi_count,
+        SUM(CASE WHEN respirasi IS NOT NULL THEN 1 ELSE 0 END) as respirasi_count,
+        SUM(CASE WHEN jarak_kasur_cm IS NOT NULL THEN 1 ELSE 0 END) as distance_count,
+        SUM(CASE WHEN fall_detected = 1 THEN 1 ELSE 0 END) as fall_count,
+        AVG(heart_rate) as avg_heart_rate,
+        AVG(glukosa) as avg_glukosa,
+        AVG(sistolik) as avg_sistolik,
+        AVG(diastolik) as avg_diastolik,
+        AVG(respirasi) as avg_respirasi,
+        AVG(berat_badan_kg) as avg_weight,
+        AVG(bmi) as avg_bmi
+       FROM vitals 
+       WHERE waktu >= ? AND waktu < ? ${whereClause}`,
+      [today, tomorrow]
+    );
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      stats: stats[0]
+    });
+  } catch (err) {
+    console.error('❌ Vitals statistics error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+// ==== API: Test Fall Detection (INSERT MANUAL) ====
+app.post('/api/test/insert-fall', requireAdmin, async (req, res) => {
+  const { emr_no } = req.body;
+  
+  if (!emr_no) {
+    return res.status(400).json({ error: 'EMR pasien harus diisi' });
+  }
+  
+  try {
+    const conn = await pool.getConnection();
+    
+    const [result] = await conn.query(
+      `INSERT INTO vitals 
+       (emr_no, heart_rate, sistolik, diastolik, respirasi, fall_detected, waktu) 
+       VALUES (?, 125, 145, 95, 24, 1, NOW())`,
+      [parseInt(emr_no)]
+    );
+    
+    conn.release();
+    
+    console.log('🚨 TEST FALL inserted for EMR:', emr_no, '- ID:', result.insertId);
+    
+    res.json({
+      success: true,
+      message: 'Test fall data inserted',
+      vital_id: result.insertId,
+      emr_no: emr_no
+    });
+  } catch (err) {
+    console.error('❌ Insert test fall error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==== API: View All Vitals (untuk debugging) ====
+app.get('/api/vitals/all', requireAdmin, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    const [vitals] = await conn.query(
+      `SELECT 
+        v.*,
+        p.nama as nama_pasien
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_pasien
+      ORDER BY v.waktu DESC
+      LIMIT 50`
+    );
+    
+    conn.release();
+    
+    res.json({ success: true, vitals });
+  } catch (err) {
+    console.error('❌ Get all vitals error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+console.log('✓ Vitals Integration Loaded');
+console.log('ℹ️  Supported devices: glukosa, tensimeter, heart_rate, timbangan, tinggi, bmi, respirasi, jarak_kasur, fall');
 
 // VALIDASI PASIEN
 app.get('/validasi_pasien/:emr', requireLogin, async (req, res) => {
@@ -1051,43 +1375,41 @@ app.get('/monitoring', requireLogin, (req, res) => {
 // 4. ADD API ENDPOINTS FOR RAWAT JALAN DASHBOARD
 // ============================================================
 // API 1: Statistics Today (FIXED - with role-based filtering)
+// ============================================================
+// API 1: Statistics Today (COMBINED - Kunjungan + Vitals)
+// ============================================================
 app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
   try {
     const conn = await pool.getConnection();
     
-    // Get today's date range (00:00:00 - 23:59:59)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    // ✅ PERBAIKAN: Add WHERE clause for perawat
     const whereClause = req.session.role === 'admin' 
       ? '' 
       : `AND emr_perawat = ${req.session.emr_perawat}`;
     
-    // Total visits today (filtered by perawat if not admin)
+    // === KUNJUNGAN STATISTICS ===
     const [visits] = await conn.query(
       `SELECT COUNT(*) as total FROM kunjungan 
        WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
       [today, tomorrow]
     );
     
-    // Total unique patients today (filtered by perawat if not admin)
     const [patients] = await conn.query(
       `SELECT COUNT(DISTINCT emr_pasien) as total FROM kunjungan 
        WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
       [today, tomorrow]
     );
     
-    // Total measurements today (filtered by perawat if not admin)
     const [measurements] = await conn.query(
       `SELECT COUNT(*) as total FROM pengukuran 
        WHERE timestamp >= ? AND timestamp < ? ${whereClause}`,
       [today, tomorrow]
     );
     
-    // Active visits (status = 'aktif') (filtered by perawat if not admin)
     const [active] = await conn.query(
       `SELECT COUNT(*) as total FROM kunjungan 
        WHERE status = 'aktif' AND tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
@@ -1110,7 +1432,6 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
-
 // API 2: Today's Visits (FIXED - with role-based filtering)
 app.get('/api/visits/today', requireAdminOrPerawat, async (req, res) => {
   try {
