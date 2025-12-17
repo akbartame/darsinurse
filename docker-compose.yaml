@@ -39,13 +39,15 @@ services:
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "4000:4000"
-
+        
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: darsinurse-phpmyadmin
     restart: always
     environment:
       PMA_HOST: darsinurse-db
+      PMA_PORT: 3306
+      PMA_FORCE_SSL: "false"
       TZ: Asia/Jakarta
     volumes:
       - /etc/localtime:/etc/localtime:ro
