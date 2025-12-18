@@ -1173,31 +1173,21 @@
     if (!audio) return;
 
     currentAlertAudio = audio;
-
-    audio.play()
+    audio.loop = true;
+        audio.play()
         .then(() => {
-        audioUnlocked = true;
-        console.log('🔊 Playing alert sound');
-        
-        // Repeat 3 times
-        let playCount = 0;
-        audio.onended = function() {
-            playCount++;
-            if (playCount < 3) {
-            audio.play();
-            }
-        };
-        })  
-        .catch(err => {
-        console.warn('⚠️ Click anywhere to hear alert sound');
-        
-        // Retry on next click
+        console.log('🔊 Alert sound looping');
+        })
+        .catch(() => {
+        console.warn('⚠️ Click anywhere to enable sound');
+
         const retryPlay = () => {
             audio.play().then(() => {
-            console.log('✓ Alert sound now playing');
+            console.log('✓ Alert sound now looping');
             });
             document.removeEventListener('click', retryPlay);
         };
+
         document.addEventListener('click', retryPlay, { once: true });
         });
     }
@@ -1206,19 +1196,11 @@
     // STOP ALERT SOUND
     // ============================================
     function stopAlertSound() {
-    const audio = document.getElementById('fall-alert-sound');
-    if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.onended = null;
-    }
-    
-    if (currentAlertAudio) {
-        currentAlertAudio.pause();
-        currentAlertAudio.currentTime = 0;
-        currentAlertAudio.onended = null;
-        currentAlertAudio = null;
-    }
+        if (currentAlertAudio) {
+            currentAlertAudio.pause();
+            currentAlertAudio.currentTime = 0;
+            currentAlertAudio.loop = false;
+        }
     }
 
     // ============================================
