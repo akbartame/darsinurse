@@ -799,29 +799,6 @@
     // ============================================
     // ALERT FUNCTIONS
     // ============================================
-    let currentAlertAudio = null;
-    function playAlertSound() {
-        const audio = document.getElementById('fall-alert-sound');
-        if (audio) {
-            currentAlertAudio = audio;
-            
-            // Play 3 times
-            let playCount = 0;
-            const maxPlays = 3;
-            
-            audio.play().catch(err => {
-            console.warn('⚠️ Audio autoplay blocked:', err);
-            });
-            
-            audio.onended = function() {
-            playCount++;
-            if (playCount < maxPlays) {
-                audio.play();
-            }
-            };
-        }
-    }
-
     function showFallAlert(alert) {
       const container = document.getElementById('fall-alert-container');
       if (!container) return;
@@ -1171,37 +1148,132 @@
         `;
       }
     }
+    // ============================================
+    // GLOBAL STATE
+    // ============================================
+    let audioUnlocked = false;
+    let currentAlertAudio = null;
 
     // ============================================
-    // LOAD DATA ON PAGE LOAD
+    // UNLOCK AUDIO ON FIRST INTERACTION
+    // ============================================
+    function unlockAudio() {
+    if (audioUnlocked) return;
+
+    const audio = document.getElementById('fall-alert-sound');
+    if (audio) {
+        audio.play()
+        .then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            audioUnlocked = true;
+            console.log('✓ Alert sounds enabled');
+        })
+        .catch(() => {
+            // Ignore error on unlock attempt
+        });
+    }
+    }
+
+    // Listen for interactions
+    ['click', 'keydown', 'touchstart', 'mousedown'].forEach(event => {
+    document.addEventListener(event, unlockAudio, { once: true });
+    });
+
+    // ============================================
+    // PLAY ALERT SOUND
+    // ============================================
+    function playAlertSound() {
+    const audio = document.getElementById('fall-alert-sound');
+    if (!audio) return;
+
+    currentAlertAudio = audio;
+
+    audio.play()
+        .then(() => {
+        audioUnlocked = true;
+        console.log('🔊 Playing alert sound');
+        
+        // Repeat 3 times
+        let playCount = 0;
+        audio.onended = function() {
+            playCount++;
+            if (playCount < 3) {
+            audio.play();
+            }
+        };
+        })  
+        .catch(err => {
+        console.warn('⚠️ Click anywhere to hear alert sound');
+        
+        // Retry on next click
+        const retryPlay = () => {
+            audio.play().then(() => {
+            console.log('✓ Alert sound now playing');
+            });
+            document.removeEventListener('click', retryPlay);
+        };
+        document.addEventListener('click', retryPlay, { once: true });
+        });
+    }
+
+    // ============================================
+    // STOP ALERT SOUND
+    // ============================================
+    function stopAlertSound() {
+    const audio = document.getElementById('fall-alert-sound');
+    if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.onended = null;
+    }
+    
+    if (currentAlertAudio) {
+        currentAlertAudio.pause();
+        currentAlertAudio.currentTime = 0;
+        currentAlertAudio.onended = null;
+        currentAlertAudio = null;
+    }
+    }
+
+    // ============================================
+    // INITIALIZATION (GABUNGAN)
     // ============================================
     document.addEventListener('DOMContentLoaded', function() {
-      console.log('✓ Page loaded, initializing data...');
-      
-      const requiredElements = [
-        'total-visits',
-        'total-measurements',
-        'visits-table-body',
-        'measurements-table-body'
-      ];
-      
-      const allElementsExist = requiredElements.every(id => {
-        const exists = document.getElementById(id) !== null;
-        if (!exists) {
-          console.error(`❌ Required element #${id} not found`);
-        }
-        return exists;
-      });
-      
-      if (allElementsExist) {
-        console.log('✓ All required elements found, loading data...');
-        loadRawatJalanData();
-      } else {
-        console.error('❌ Some required elements are missing, retrying...');
+        console.log('✓ Page loaded, initializing...');
+        
+        // Audio unlock banner
         setTimeout(() => {
-          loadRawatJalanData();
-        }, 500);
-      }
+            if (!audioUnlocked) {
+            console.warn('⚠️ Click anywhere to enable alert sounds');
+            }
+        }, 3000);
+        
+        // Validate elements
+        const requiredElements = [
+            'total-visits',
+            'total-measurements',
+            'visits-table-body',
+            'measurements-table-body'
+        ];
+        
+        const allElementsExist = requiredElements.every(id => {
+            const exists = document.getElementById(id) !== null;
+            if (!exists) {
+            console.error(`❌ Required element #${id} not found`);
+            }
+            return exists;
+        });
+        
+        if (allElementsExist) {
+            console.log('✓ All required elements found, loading data...');
+            loadRawatJalanData();
+        } else {
+            console.error('❌ Some required elements are missing, retrying...');
+            setTimeout(() => {
+            loadRawatJalanData();
+            }, 500);
+        }
     });
 
     console.log('✓ Fall detection client initialized');
