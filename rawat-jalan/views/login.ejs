@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darsinurse Gateway - Login</title>
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏥</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary-green: #00B14F;
+      --secondary-green: #008a3d;
+      --primary-blue: #0056b3;
+      --secondary-teal: #20c997;
+      --light-bg: #f0f8f7;
+      --dark-text: #1a3a3a;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .top-header {
+      background: white;
+      padding: 1rem 0;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      z-index: 1000;
+    }
+
+    .logo-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-header i {
+      font-size: 28px;
+      color: var(--primary-green);
+    }
+
+    .logo-header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin: 0;
+    }
+
+    .logo-header span {
+      font-size: 14px;
+      color: #666;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      padding-top: 80px;
+    }
+
+    /* Left Side - Info */
+    .left-side {
+      flex: 1;
+      background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-green) 100%);
+      padding: 80px 60px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .hero-title {
+      font-size: 48px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      line-height: 1.2;
+    }
+
+    .hero-subtitle {
+      font-size: 20px;
+      margin-bottom: 50px;
+      opacity: 0.95;
+      line-height: 1.6;
+    }
+
+    .stats-container {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 30px;
+      margin-top: 40px;
+    }
+
+    .stat-box {
+      text-align: center;
+      padding: 20px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+
+    .stat-icon {
+      font-size: 40px;
+      margin-bottom: 15px;
+    }
+
+    .stat-number {
+      font-size: 42px;
+      font-weight: 700;
+      margin: 10px 0;
+    }
+
+    .stat-label {
+      font-size: 16px;
+      opacity: 0.9;
+    }
+
+    /* Right Side - Login Form */
+    .right-side {
+      flex: 1;
+      background: white;
+      padding: 80px 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .login-header {
+      margin-bottom: 40px;
+    }
+
+    .login-header h2 {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin-bottom: 10px;
+    }
+
+    .login-header p {
+      color: #666;
+      font-size: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    label {
+      font-weight: 600;
+      color: var(--dark-text);
+      margin-bottom: 8px;
+      display: block;
+      font-size: 14px;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-wrapper i {
+      position: absolute;
+      left: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--primary-green);
+      font-size: 18px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 14px 15px 14px 45px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: all 0.3s ease;
+      background: #f9f9f9;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus {
+      outline: none;
+      border-color: var(--primary-green);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(0, 177, 79, 0.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary-green);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 10px;
+    }
+
+    .btn-login:hover {
+      background: var(--secondary-green);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0, 177, 79, 0.3);
+    }
+
+    .alert {
+      border-radius: 8px;
+      border: none;
+      margin-bottom: 25px;
+      padding: 12px 15px;
+      font-size: 14px;
+    }
+
+    .demo-accounts {
+      margin-top: 40px;
+      padding-top: 30px;
+      border-top: 1px solid #e0e0e0;
+    }
+
+    .demo-accounts h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .account-item {
+      background: #f8f9fa;
+      padding: 12px 15px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .account-item .role {
+      font-weight: 600;
+      color: var(--dark-text);
+    }
+
+    .account-item .badge {
+      font-size: 10px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .account-item code {
+      font-size: 12px;
+      background: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: var(--primary-green);
+    }
+
+    /* Footer */
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+    }
+
+    .footer-content {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .footer-logo i {
+      font-size: 20px;
+      color: var(--primary-green);
+    }
+
+    .footer p {
+      margin: 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    /* Responsive */
+    @media (max-width: 968px) {
+      .main-content {
+        flex-direction: column;
+      }
+
+      .left-side,
+      .right-side {
+        padding: 40px 30px;
+      }
+
+      .hero-title {
+        font-size: 36px;
+      }
+
+      .stats-container {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="top-header">
+    <div class="container">
+      <div class="logo-header">
+        <i class="fas fa-heartbeat"></i>
+        <div>
+          <h1>Darsinurse Gateway</h1>
+          <span>Medical IoT Platform</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Left Side - Information -->
+    <div class="left-side">
+      <div>
+        <h1 class="hero-title">Sistem Analisis Risiko Kesehatan</h1>
+        <p class="hero-subtitle">
+          Platform diagnostik berbasis IoT untuk deteksi dini dan penilaian risiko 
+          penyakit jantung, diabetes, dan stroke menggunakan Web Bluetooth API
+        </p>
+
+        <div class="stats-container">
+          <div class="stat-box">
+            <div class="stat-icon"><i class="fas fa-users"></i></div>
+            <div class="stat-number">768+</div>
+            <div class="stat-label">Data Pasien</div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-icon"><i class="fas fa-brain"></i></div>
+            <div class="stat-number">95%</div>
+            <div class="stat-label">Akurasi Model</div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-icon"><i class="fas fa-brands fa-bluetooth"></i></div>
+            <div class="stat-number">4</div>
+            <div class="stat-label">Device Support</div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-number">Real-time</div>
+            <div class="stat-label">Monitoring</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Side - Login Form -->
+    <div class="right-side">
+      <div>
+        <div class="login-header">
+          <h2>Selamat Datang</h2>
+          <p>Silakan login untuk mengakses sistem</p>
+        </div>
+
+        <!-- Error Message -->
+        <% if (error) { %>
+          <div class="alert alert-danger" role="alert">
+            <i class="fas fa-exclamation-circle"></i> <%= error %>
+          </div>
+        <% } %>
+
+        <!-- Login Form -->
+        <form method="POST" action="/login">
+          <div class="form-group">
+            <label for="emr_perawat">EMR Perawat</label>
+            <div class="input-wrapper">
+              <i class="fas fa-user"></i>
+              <input 
+                type="text" 
+                id="emr_perawat" 
+                name="emr_perawat" 
+                placeholder="Masukkan EMR Perawat (angka)" 
+                required
+                autocomplete="off"
+              >
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="input-wrapper">
+              <i class="fas fa-lock"></i>
+              <input 
+                type="password" 
+                id="password" 
+                name="password" 
+                placeholder="Masukkan password" 
+                required
+              >
+            </div>
+          </div>
+
+          <button type="submit" class="btn-login">
+            <i class="fas fa-sign-in-alt"></i> Masuk Sekarang
+          </button>
+        </form>
+
+        <!-- Demo Accounts -->
+        <div class="demo-accounts">
+          <h4>🔑 Akun Demo</h4>
+          
+          <div class="account-item">
+            <div>
+              <span class="role">Administrator</span>
+              <span class="badge bg-warning text-dark">ADMIN</span>
+            </div>
+            <div>
+              <code>1</code> / <code>admin123</code>
+            </div>
+          </div>
+
+          <div class="account-item">
+            <div>
+              <span class="role">Siti Nurhaliza</span>
+              <span class="badge bg-success">PERAWAT</span>
+            </div>
+            <div>
+              <code>2</code> / <code>pass123</code>
+            </div>
+          </div>
+
+          <div class="account-item">
+            <div>
+              <span class="role">Ahmad Wijaya</span>
+              <span class="badge bg-success">PERAWAT</span>
+            </div>
+            <div>
+              <code>3</code> / <code>pass456</code>
+            </div>
+          </div>
+
+          <div class="account-item">
+            <div>
+              <span class="role">Dewi Lestari</span>
+              <span class="badge bg-success">PERAWAT</span>
+            </div>
+            <div>
+              <code>4</code> / <code>pass789</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-logo">
+          <i class="fas fa-flask"></i>
+          <strong>Hint-lab Team</strong>
+        </div>
+        <span>|</span>
+        <p>&copy; 2025 Darsinurse Gateway. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

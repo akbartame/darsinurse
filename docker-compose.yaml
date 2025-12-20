@@ -1,6 +1,9 @@
 version: "3.9"
 
 services:
+  # ========================================
+  # MySQL Database (Shared)
+  # ========================================
   darsinurse-db:
     image: mysql:8.0
     container_name: darsinurse-db
@@ -16,9 +19,21 @@ services:
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "3306:3306"
+    networks:
+      - darsinurse_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ========================================
+  # Rawat Jalan Application (Port 4000)
+  # ========================================
   darsinurse-app:
-    build: .
+    build:
+      context: ./rawat-jalan
+      dockerfile: Dockerfile
     container_name: darsinurse-app
     restart: always
     environment:
@@ -28,17 +43,68 @@ services:
       DB_PASSWORD: darsinurse123
       DB_NAME: darsinurse
       TZ: Asia/Jakarta
-
-      # 🔐 METABASE EMBED
-      METABASE_URL: "https://darsinurse.hint-lab.id"
-      METABASE_SECRET: "a7dd79ccd6a69475c06533ca4d9ac152c443ed3c7550ec7be12ba06dd1b7ce55"
-
+      NODE_ENV: production
+      PORT: 4000
     depends_on:
-      - darsinurse-db
+      darsinurse-db:
+        condition: service_healthy
     volumes:
       - /etc/localtime:/etc/localtime:ro
     ports:
       - "4000:4000"
+    networks:
+      - darsinurse_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================
+  # Monitoring Application (Port 5000) - NEW!
+  # ========================================
+  darsinurse-monitoring:
+    build:
+      context: ./monitoring
+      dockerfile: Dockerfile
+    container_name: darsinurse-monitoring
+    restart: always
+    environment:
+      DB_HOST: darsinurse-db
+      DB_PORT: 3306
+      DB_USER: darsinurse
+      DB_PASSWORD: darsinurse123
+      DB_NAME: darsinurse
+      TZ: Asia/Jakarta
+      NODE_ENV: production
+      MONITORING_PORT: 5000
+      
+      # CORS Configuration
+      CORS_ORIGIN: "http://darsinurse-app:4000,https://rawatjalan.darsinurse.hint-lab.id"
+      
+      # Metabase Configuration
+      METABASE_URL: "https://darsinurse.hint-lab.id"
+      METABASE_SECRET: "a7dd79ccd6a69475c06533ca4d9ac152c443ed3c7550ec7be12ba06dd1b7ce55"
+    depends_on:
+      darsinurse-db:
+        condition: service_healthy
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "5000:5000"
+    networks:
+      - darsinurse_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ========================================
+  # phpMyAdmin
+  # ========================================
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: darsinurse-phpmyadmin
@@ -55,7 +121,12 @@ services:
       - "8080:80"
     depends_on:
       - darsinurse-db
+    networks:
+      - darsinurse_network
 
+  # ========================================
+  # Metabase
+  # ========================================
   metabase:
     image: metabase/metabase
     container_name: metabase
@@ -67,10 +138,59 @@ services:
       TZ: Asia/Jakarta
     volumes:
       - metabase_data:/metabase-data
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
       - darsinurse-db
+    networks:
+      - darsinurse_network
 
+# ========================================
+# Networks
+# ========================================
+networks:
+  darsinurse_network:
+    driver: bridge
+
+# ========================================
+# Volumes
+# ========================================
 volumes:
   darsinurse_mysql_data:
   metabase_data:
 
+# ============================================================
+# CARA MENGGUNAKAN:
+# ============================================================
+# 1. Pastikan struktur folder sudah benar:
+#    project/
+#    ├── docker-compose.yml (file ini)
+#    ├── rawat-jalan/
+#    │   ├── Dockerfile
+#    │   ├── server.js
+#    │   └── package.json
+#    └── monitoring/
+#        ├── Dockerfile
+#        ├── monitoring-server.js
+#        └── package.json
+#
+# 2. Build dan jalankan semua services:
+#    docker-compose up -d
+#
+# 3. Cek status:
+#    docker-compose ps
+#
+# 4. Lihat logs:
+#    docker-compose logs -f
+#
+# 5. Akses aplikasi:
+#    - Rawat Jalan: http://localhost:4000
+#    - Monitoring: http://localhost:5000
+#    - phpMyAdmin: http://localhost:8080
+#    - Metabase: http://localhost:3000
+#
+# 6. Stop services:
+#    docker-compose down
+#
+# 7. Stop dan hapus volumes:
+#    docker-compose down -v
+# ============================================================

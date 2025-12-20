@@ -1587,53 +1587,13 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
   return `${METABASE_URL}/embed/dashboard/${token}#bordered=true&titled=true`;
 }
 
-// ============================================================
-// 3. ADD ADMIN MONITORING ROUTE (Page Render)
-// ============================================================
-
-app.get('/admin/monitoring', requireAdmin, (req, res) => {
-  res.render('admin-monitoring', {
-    nama_perawat: req.session.nama_perawat,
-    emr_perawat: req.session.emr_perawat,
-    role: req.session.role
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    server: 'rawat-jalan',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
-});
-
-// Route untuk perawat (jika ingin mereka juga bisa lihat monitoring)
-app.get('/monitoring', requireLogin, (req, res) => {
-  res.render('admin-monitoring', {
-    nama_perawat: req.session.nama_perawat,
-    emr_perawat: req.session.emr_perawat,
-    role: req.session.role
-  });
-});
-
-
-// ============================================================
-// 4. ADD API ENDPOINTS FOR RAWAT JALAN DASHBOARD
-// ============================================================
-// API 4: Metabase Embed Token for Rawat Inap Dashboard
-app.get('/api/metabase/rawat-inap-token', requireAdminOrPerawat, (req, res) => {
-  try {
-    // Dashboard ID untuk Rawat Inap - sesuaikan dengan ID di Metabase Anda
-    const DASHBOARD_ID = 1; // ⚠️ CHANGE THIS to your actual Metabase dashboard ID
-    
-    // Generate embed URL with JWT token
-    const embedUrl = getMetabaseEmbedUrl(DASHBOARD_ID);
-    
-    console.log('✓ Metabase embed URL generated for dashboard:', DASHBOARD_ID);
-    
-    res.json({
-      success: true,
-      embedUrl: embedUrl
-    });
-  } catch (err) {
-    console.error('❌ Metabase token error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Gagal generate Metabase token: ' + err.message 
-    });
-  }
 });
 
 
