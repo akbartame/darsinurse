@@ -209,6 +209,54 @@ async function initDatabase() {
   console.log("✓ Database initialized successfully!");
 }
 
+/* ============================================================
+   EXPRESS & SESSION SETUP
+   ============================================================ */
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(session({
+  secret: 'darsinurse-rawatjalan-secret-2025',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true, secure: false }
+}));
+
+/* ============================================================
+   AUTH MIDDLEWARE
+   ============================================================ */
+const requireLogin = (req, res, next) => {
+  if (!req.session.emr_perawat) return res.redirect('/');
+  next();
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.session.emr_perawat) return res.redirect('/');
+  if (req.session.role !== 'admin') {
+    return res.status(403).send('Access Denied: Admin only');
+  }
+  next();
+};
+
+const requireAdminOrPerawat = (req, res, next) => {
+  if (!req.session.emr_perawat) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  if (req.session.role === 'admin' || req.session.role === 'perawat') {
+    return next();
+  }
+
+  return res.status(403).json({ error: 'Access denied' });
+};
+
+
+/* ============================================================
+   ROUTES
+   ============================================================ */
 // ============================================================
 // PART 2: FIX API ENDPOINTS
 // ============================================================
@@ -451,55 +499,6 @@ initDatabase().catch(err => {
   console.error('Failed to initialize database:', err);
   process.exit(1);
 });
-
-/* ============================================================
-   EXPRESS & SESSION SETUP
-   ============================================================ */
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.use(session({
-  secret: 'darsinurse-rawatjalan-secret-2025',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true, secure: false }
-}));
-
-/* ============================================================
-   AUTH MIDDLEWARE
-   ============================================================ */
-const requireLogin = (req, res, next) => {
-  if (!req.session.emr_perawat) return res.redirect('/');
-  next();
-};
-
-const requireAdmin = (req, res, next) => {
-  if (!req.session.emr_perawat) return res.redirect('/');
-  if (req.session.role !== 'admin') {
-    return res.status(403).send('Access Denied: Admin only');
-  }
-  next();
-};
-
-const requireAdminOrPerawat = (req, res, next) => {
-  if (!req.session.emr_perawat) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-
-  if (req.session.role === 'admin' || req.session.role === 'perawat') {
-    return next();
-  }
-
-  return res.status(403).json({ error: 'Access denied' });
-};
-
-
-/* ============================================================
-   ROUTES
-   ============================================================ */
 
 // LOGIN PAGE
 app.get('/', (req, res) => {
