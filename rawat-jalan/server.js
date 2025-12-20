@@ -1345,30 +1345,86 @@ app.get('/api/vitals/all', requireAdmin, async (req, res) => {
   }
 });
 
-console.log('✓ Vitals Integration Loaded');
-console.log('ℹ️  Supported devices: glukosa, tensimeter, heart_rate, timbangan, tinggi, bmi, respirasi, jarak_kasur, fall');
+  console.log('✓ Vitals Integration Loaded');
+  console.log('ℹ️  Supported devices: glukosa, tensimeter, heart_rate, timbangan, tinggi, bmi, respirasi, jarak_kasur, fall');
 
-// VALIDASI PASIEN
-app.get('/validasi_pasien/:emr', requireLogin, async (req, res) => {
-  const emrInt = parseInt(req.params.emr);
-  if (isNaN(emrInt)) {
-    return res.status(400).json({ valid: false, error: 'EMR tidak valid' });
-  }
-  
-  try {
-    const conn = await pool.getConnection();
-    const [rows] = await conn.query(
-      'SELECT * FROM pasien WHERE emr_no = ?',
-      [emrInt]
-    );
-    conn.release();
+  // VALIDASI PASIEN
+  app.get('/validasi_pasien/:emr', requireLogin, async (req, res) => {
+    const emrInt = parseInt(req.params.emr);
+    if (isNaN(emrInt)) {
+      return res.status(400).json({ valid: false, error: 'EMR tidak valid' });
+    }
+    
+    try {
+      const conn = await pool.getConnection();
+      const [rows] = await conn.query(
+        'SELECT * FROM pasien WHERE emr_no = ?',
+        [emrInt]
+      );
+      conn.release();
 
-    res.json({ valid: rows.length > 0, pasien: rows[0] || null });
-  } catch (err) {
-    console.error('❌ Validate patient error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
+      res.json({ valid: rows.length > 0, pasien: rows[0] || null });
+    } catch (err) {
+      console.error('❌ Validate patient error:', err);
+      res.status(500).json({ error: 'Database error: ' + err.message });
+    }
+  });
+
+  // REGISTER NEW PATIENT (dari dashboard perawat)
+  app.post('/api/patients/register', requireLogin, async (req, res) => {
+    const { emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat } = req.body;
+    
+    const emrInt = parseInt(emr_no);
+    if (isNaN(emrInt)) {
+      return res.status(400).json({ error: 'EMR Pasien harus berupa angka' });
+    }
+    
+    if (!emrInt || !nama || !tanggal_lahir || !jenis_kelamin || !poli) {
+      return res.status(400).json({ 
+        error: 'EMR, Nama, Tanggal Lahir, Jenis Kelamin, dan Poli harus diisi' 
+      });
+    }
+
+    try {
+      const conn = await pool.getConnection();
+      
+      // Cek apakah EMR sudah ada
+      const [existing] = await conn.query(
+        'SELECT emr_no FROM pasien WHERE emr_no = ?',
+        [emrInt]
+      );
+      
+      if (existing.length > 0) {
+        conn.release();
+        return res.status(400).json({ 
+          error: 'EMR Pasien sudah terdaftar' 
+        });
+      }
+      
+      // Insert pasien baru
+      await conn.query(
+        'INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat) VALUES (?, ?, ?, ?, ?, ?)',
+        [emrInt, nama, tanggal_lahir, jenis_kelamin, poli, alamat || '']
+      );
+      
+      conn.release();
+      
+      console.log('✓ New patient registered by nurse:', emrInt, '-', nama);
+      addLog(`Pasien baru didaftarkan: ${nama} (EMR: ${emrInt}) oleh ${req.session.nama_perawat}`, 'success');
+      
+      res.json({ 
+        success: true, 
+        message: 'Pasien berhasil didaftarkan',
+        emr_no: emrInt
+      });
+    } catch (err) {
+      console.error('❌ Register patient error:', err);
+      res.status(500).json({ 
+        error: 'Database error: ' + err.message 
+      });
+    }
+  });
+
 
 // LOGOUT
 app.get('/logout', (req, res) => {
