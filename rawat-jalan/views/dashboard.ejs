@@ -1369,32 +1369,6 @@
       }
     }
 
-    // ==== VALIDATE PATIENT ====
-    async function validatePatient(emrPasien, type) {
-      try {
-        const response = await fetch(`/validasi_pasien/${emrPasien}`);
-        const result = await response.json();
-
-        const infoDiv = document.getElementById(`${type}-patient-info`);
-        
-        if (result.valid) {
-          currentPatients[type] = emrPasien;
-          infoDiv.innerHTML = `<div class="patient-info mt-2">✓ <strong>${result.pasien.nama}</strong><br><small>Poli: ${result.pasien.poli} | ${result.pasien.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</small></div>`;
-          addLog(`Pasien ditemukan: ${result.pasien.nama} (EMR: ${emrPasien})`, 'success');
-          return true;
-        } else {
-          infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Pasien dengan EMR ${emrPasien} tidak ditemukan</div>`;
-          addLog(`Pasien EMR ${emrPasien} tidak ditemukan`, 'error');
-          return false;
-        }
-      } catch (err) {
-        const infoDiv = document.getElementById(`${type}-patient-info`);
-        infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Error: ${err.message}</div>`;
-        addLog('Error validasi: ' + err.message, 'error');
-        return false;
-      }
-    }
-
     // ==== SEND DATA TO SERVER ====
     async function sendToServer(tipe, emrPasien, idKunjungan, dataValue) {
       try {
@@ -1602,6 +1576,99 @@
         return false;
       }
     }
+    // ==== SHOW FORM PASIEN BARU ====
+    function showFormPasienBaru(emr) {
+      // Hide kunjungan form
+      document.getElementById('card-kunjungan').classList.remove('active');
+      
+      // Show pasien baru form
+      document.getElementById('card-pasien-baru').classList.add('active');
+      
+      // Set EMR
+      document.getElementById('pasien-baru-emr').value = emr;
+      document.getElementById('new-patient-emr-display').textContent = emr;
+      
+      addLog(`Form pendaftaran pasien baru dibuka untuk EMR: ${emr}`, 'info');
+    }
+
+    // ==== CANCEL PASIEN BARU ====
+    document.getElementById('btn-cancel-pasien-baru').addEventListener('click', function() {
+      // Hide pasien baru form
+      document.getElementById('card-pasien-baru').classList.remove('active');
+      
+      // Show kunjungan form
+      document.getElementById('card-kunjungan').classList.add('active');
+      
+      // Reset form
+      document.getElementById('form-pasien-baru').reset();
+      document.getElementById('pasien-baru-status').innerHTML = '';
+      
+      addLog('Batal mendaftar pasien baru', 'info');
+    });
+
+    // ==== SUBMIT PASIEN BARU ====
+    document.getElementById('form-pasien-baru').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const emrNo = document.getElementById('pasien-baru-emr').value;
+      const nama = document.getElementById('pasien-baru-nama').value;
+      const tglLahir = document.getElementById('pasien-baru-tgl-lahir').value;
+      const jk = document.getElementById('pasien-baru-jk').value;
+      const poli = document.getElementById('pasien-baru-poli').value;
+      const alamat = document.getElementById('pasien-baru-alamat').value;
+      
+      if (!emrNo || !nama || !tglLahir || !jk || !poli) {
+        showStatus('pasien-baru', '✗ Semua field wajib harus diisi', 'danger');
+        return;
+      }
+      
+      try {
+        showStatus('pasien-baru', '⏳ Mendaftarkan pasien...', 'info');
+        
+        const response = await fetch('/api/patients/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            emr_no: parseInt(emrNo),
+            nama: nama,
+            tanggal_lahir: tglLahir,
+            jenis_kelamin: jk,
+            poli: poli,
+            alamat: alamat
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showStatus('pasien-baru', '✓ Pasien berhasil didaftarkan!', 'success');
+          addLog(`Pasien baru terdaftar: ${nama} (EMR: ${emrNo})`, 'success');
+          
+          alert(`Pasien berhasil didaftarkan!\n\nNama: ${nama}\nEMR: ${emrNo}\nPoli: ${poli}\n\nAnda akan kembali ke form kunjungan.`);
+          
+          // Reset form
+          document.getElementById('form-pasien-baru').reset();
+          document.getElementById('pasien-baru-status').innerHTML = '';
+          
+          // Hide pasien baru form
+          document.getElementById('card-pasien-baru').classList.remove('active');
+          
+          // Show kunjungan form
+          document.getElementById('card-kunjungan').classList.add('active');
+          
+          // Set EMR di form kunjungan dan auto-validate
+          document.getElementById('new-emr-pasien').value = emrNo;
+          await validatePatient(parseInt(emrNo), 'kunjungan');
+          
+        } else {
+          showStatus('pasien-baru', `✗ Error: ${result.error}`, 'danger');
+          addLog(`Error mendaftar pasien: ${result.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus('pasien-baru', `✗ Error: ${err.message}`, 'danger');
+        addLog(`Network error: ${err.message}`, 'error');
+      }
+    });
 
     // ==== STOP CONNECTION ====
     function stopConnection(type) {
