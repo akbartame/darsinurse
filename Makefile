@@ -1,462 +1,107 @@
-# ============================================================
-# DARSINURSE GATEWAY - Makefile
-# Simplified Docker management commands
-# ============================================================
-
-.PHONY: help setup build up down restart logs clean status health backup restore install test migrate
-
-.DEFAULT_GOAL := help
-
-# Colors for terminal output
-RED := \033[0;31m
-GREEN := \033[0;32m
-YELLOW := \033[0;33m
-BLUE := \033[0;36m
-NC := \033[0m # No Color
 
 # ============================================================
-# MAIN COMMANDS
+# MAKEFILE
+# Save as: Makefile (di root project)
 # ============================================================
 
-help: ## 📚 Show this help message
-	@echo "$(BLUE)╔════════════════════════════════════════════════╗$(NC)"
-	@echo "$(BLUE)║   DARSINURSE GATEWAY - Available Commands     ║$(NC)"
-	@echo "$(BLUE)╚════════════════════════════════════════════════╝$(NC)"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-20s$(NC) %s\n", $$1, $$2}'
-	@echo ""
-	@echo "$(YELLOW)Examples:$(NC)"
-	@echo "  make setup          # First time setup"
-	@echo "  make up             # Start all services"
-	@echo "  make logs-app       # View rawat-jalan logs"
-	@echo "  make health         # Check all services"
-	@echo ""
+.PHONY: help build up down restart logs clean status health backup
 
-setup: ## 🔧 Initial setup (first time only)
-	@echo "$(BLUE)🔧 Setting up Darsinurse Gateway...$(NC)"
-	@mkdir -p backups
-	@mkdir -p rawat-jalan/views monitoring/views
-	@echo "$(GREEN)✅ Folder structure created$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Next steps:$(NC)"
-	@echo "1. Copy your existing files to rawat-jalan/"
-	@echo "2. Create monitoring/monitoring-server.js"
-	@echo "3. Run: make build"
-	@echo "4. Run: make up"
+help: ## Show this help message
+	@echo "Darsinurse Gateway - Docker Commands"
+	@echo "===================================="
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-# ============================================================
-# DOCKER OPERATIONS
-# ============================================================
-
-build: ## 🔨 Build all Docker images
-	@echo "$(BLUE)🔨 Building Docker images...$(NC)"
+build: ## Build all Docker images
+	@echo "🔨 Building Docker images..."
 	docker compose build --no-cache
-	@echo "$(GREEN)✅ Build complete!$(NC)"
+	@echo "✅ Build complete!"
 
-build-app: ## 🔨 Build Rawat Jalan only
-	@echo "$(BLUE)🔨 Building Rawat Jalan image...$(NC)"
-	docker compose build --no-cache darsinurse-app
-	@echo "$(GREEN)✅ Rawat Jalan built!$(NC)"
-
-build-monitoring: ## 🔨 Build Monitoring only
-	@echo "$(BLUE)🔨 Building Monitoring image...$(NC)"
-	docker compose build --no-cache darsinurse-monitoring
-	@echo "$(GREEN)✅ Monitoring built!$(NC)"
-
-up: ## 🚀 Start all services
-	@echo "$(BLUE)🚀 Starting all services...$(NC)"
+up: ## Start all services
+	@echo "🚀 Starting all services..."
 	docker compose up -d
+	@echo "✅ Services started!"
 	@echo ""
-	@echo "$(GREEN)✅ Services started!$(NC)"
-	@echo ""
-	@echo "$(BLUE)📍 Access URLs:$(NC)"
-	@echo "   - Rawat Jalan:  http://localhost:4000"
-	@echo "   - Monitoring:   http://localhost:5000"
-	@echo "   - phpMyAdmin:   http://localhost:8080"
-	@echo "   - Metabase:     http://localhost:3000"
-	@echo ""
-	@echo "$(YELLOW)💡 Tip: Run 'make logs' to view logs$(NC)"
+	@echo "📍 Access URLs:"
+	@echo "   - Rawat Jalan: http://localhost:4000"
+	@echo "   - Monitoring:  http://localhost:5000"
+	@echo "   - phpMyAdmin:  http://localhost:8080"
+	@echo "   - Metabase:    http://localhost:3000"
 
-up-dev: ## 🚀 Start in development mode (with logs)
-	@echo "$(BLUE)🚀 Starting in development mode...$(NC)"
-	docker compose up
-
-down: ## ⏹️  Stop all services
-	@echo "$(BLUE)⏹️  Stopping all services...$(NC)"
+down: ## Stop all services
+	@echo "⏹️  Stopping all services..."
 	docker compose down
-	@echo "$(GREEN)✅ Services stopped!$(NC)"
+	@echo "✅ Services stopped!"
 
-restart: ## 🔄 Restart all services
-	@echo "$(BLUE)🔄 Restarting all services...$(NC)"
+restart: ## Restart all services
+	@echo "🔄 Restarting services..."
 	docker compose restart
-	@echo "$(GREEN)✅ Services restarted!$(NC)"
+	@echo "✅ Services restarted!"
 
-restart-app: ## 🔄 Restart Rawat Jalan only
-	@echo "$(BLUE)🔄 Restarting Rawat Jalan...$(NC)"
+restart-app: ## Restart only rawat-jalan
 	docker compose restart darsinurse-app
-	@echo "$(GREEN)✅ Rawat Jalan restarted!$(NC)"
 
-restart-monitoring: ## 🔄 Restart Monitoring only
-	@echo "$(BLUE)🔄 Restarting Monitoring...$(NC)"
+restart-monitoring: ## Restart only monitoring
 	docker compose restart darsinurse-monitoring
-	@echo "$(GREEN)✅ Monitoring restarted!$(NC)"
 
-restart-db: ## 🔄 Restart Database only
-	@echo "$(BLUE)🔄 Restarting Database...$(NC)"
-	docker compose restart darsinurse-db
-	@echo "$(GREEN)✅ Database restarted!$(NC)"
-
-# ============================================================
-# LOGS
-# ============================================================
-
-logs: ## 📋 Show logs (all services, follow mode)
+logs: ## Show logs (all services)
 	docker compose logs -f
 
-logs-app: ## 📋 Show Rawat Jalan logs
+logs-app: ## Show logs (rawat-jalan only)
 	docker compose logs -f darsinurse-app
 
-logs-monitoring: ## 📋 Show Monitoring logs
+logs-monitoring: ## Show logs (monitoring only)
 	docker compose logs -f darsinurse-monitoring
 
-logs-db: ## 📋 Show Database logs
+logs-db: ## Show logs (database only)
 	docker compose logs -f darsinurse-db
 
-logs-meta: ## 📋 Show Metabase logs
-	docker compose logs -f metabase
-
-logs-all: ## 📋 Show all logs (no follow)
-	docker compose logs --tail=100
-
-# ============================================================
-# STATUS & HEALTH
-# ============================================================
-
-status: ## 📊 Show status of all services
-	@echo "$(BLUE)📊 Services Status:$(NC)"
+status: ## Show status of all services
+	@echo "📊 Services Status:"
 	@docker compose ps
-	@echo ""
 
-ps: status ## Alias for status
+health: ## Check health of all services
+	@echo "🏥 Health Check:"
+	@echo ""
+	@echo "MySQL Database:"
+	@docker exec darsinurse-db mysqladmin ping -h localhost -u root -proot123 && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+	@echo ""
+	@echo "Rawat Jalan (Port 4000):"
+	@curl -sf http://localhost:4000/health > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
+	@echo ""
+	@echo "Monitoring (Port 5000):"
+	@curl -sf http://localhost:5000/health > /dev/null && echo "  ✅ Healthy" || echo "  ❌ Unhealthy"
 
-health: ## 🏥 Check health of all services
-	@echo "$(BLUE)🏥 Health Check:$(NC)"
-	@echo ""
-	@echo "$(YELLOW)MySQL Database:$(NC)"
-	@docker exec darsinurse-db mysqladmin ping -h localhost -u root -proot123 2>/dev/null \
-		&& echo "  $(GREEN)✅ Healthy$(NC)" \
-		|| echo "  $(RED)❌ Unhealthy$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Rawat Jalan (Port 4000):$(NC)"
-	@curl -sf http://localhost:4000/health > /dev/null 2>&1 \
-		&& echo "  $(GREEN)✅ Healthy$(NC)" \
-		|| echo "  $(RED)❌ Unhealthy$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Monitoring (Port 5000):$(NC)"
-	@curl -sf http://localhost:5000/health > /dev/null 2>&1 \
-		&& echo "  $(GREEN)✅ Healthy$(NC)" \
-		|| echo "  $(RED)❌ Unhealthy$(NC)"
-	@echo ""
-	@echo "$(YELLOW)phpMyAdmin (Port 8080):$(NC)"
-	@curl -sf http://localhost:8080 > /dev/null 2>&1 \
-		&& echo "  $(GREEN)✅ Healthy$(NC)" \
-		|| echo "  $(RED)❌ Unhealthy$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Metabase (Port 3000):$(NC)"
-	@curl -sf http://localhost:3000 > /dev/null 2>&1 \
-		&& echo "  $(GREEN)✅ Healthy$(NC)" \
-		|| echo "  $(RED)❌ Unhealthy$(NC)"
-	@echo ""
+clean: ## Stop and remove all containers, volumes, and images
+	@echo "🧹 Cleaning up..."
+	docker compose down -v --rmi all
+	@echo "✅ Cleanup complete!"
 
-check: health ## Alias for health
-
-info: ## ℹ️  Show detailed system info
-	@echo "$(BLUE)ℹ️  System Information:$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Docker Version:$(NC)"
-	@docker --version
-	@echo ""
-	@echo "$(YELLOW)Docker Compose Version:$(NC)"
-	@docker compose --version
-	@echo ""
-	@echo "$(YELLOW)Running Containers:$(NC)"
-	@docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-	@echo ""
-	@echo "$(YELLOW)Disk Usage:$(NC)"
-	@docker system df
-	@echo ""
-
-# ============================================================
-# DATABASE OPERATIONS
-# ============================================================
-
-backup: ## 💾 Backup MySQL database
-	@echo "$(BLUE)💾 Backing up database...$(NC)"
+backup: ## Backup MySQL database
+	@echo "💾 Backing up database..."
 	@mkdir -p backups
 	@docker exec darsinurse-db mysqldump -u root -proot123 darsinurse > backups/darsinurse_$(shell date +%Y%m%d_%H%M%S).sql
-	@echo "$(GREEN)✅ Backup saved to: backups/darsinurse_$(shell date +%Y%m%d_%H%M%S).sql$(NC)"
-	@ls -lh backups/ | tail -5
+	@echo "✅ Backup saved to: backups/darsinurse_$(shell date +%Y%m%d_%H%M%S).sql"
 
-backup-list: ## 📋 List all backups
-	@echo "$(BLUE)📋 Available backups:$(NC)"
-	@ls -lh backups/*.sql 2>/dev/null || echo "No backups found"
-
-restore: ## 📥 Restore database from backup (use FILE=path/to/backup.sql)
+restore: ## Restore database from latest backup (use FILE=path/to/backup.sql to specify)
 	@if [ -z "$(FILE)" ]; then \
-		echo "$(RED)❌ Please specify backup file:$(NC)"; \
-		echo "   $(YELLOW)make restore FILE=backups/darsinurse_20250101_120000.sql$(NC)"; \
+		echo "❌ Please specify backup file: make restore FILE=backups/file.sql"; \
 		exit 1; \
 	fi
-	@echo "$(BLUE)📥 Restoring database from $(FILE)...$(NC)"
+	@echo "📥 Restoring database from $(FILE)..."
 	@docker exec -i darsinurse-db mysql -u root -proot123 darsinurse < $(FILE)
-	@echo "$(GREEN)✅ Database restored!$(NC)"
+	@echo "✅ Database restored!"
 
-db-shell: ## 💻 Open MySQL shell
-	@echo "$(BLUE)💻 Opening MySQL shell...$(NC)"
-	docker exec -it darsinurse-db mysql -u root -proot123 darsinurse
-
-db-tables: ## 📊 Show database tables
-	@echo "$(BLUE)📊 Database Tables:$(NC)"
-	@docker exec darsinurse-db mysql -u darsinurse -pdarsinurse123 darsinurse -e "SHOW TABLES;"
-
-db-users: ## 👥 Show users in database
-	@echo "$(BLUE)👥 Users in Database:$(NC)"
-	@docker exec darsinurse-db mysql -u darsinurse -pdarsinurse123 darsinurse -e "SELECT emr_perawat, nama, role FROM perawat;"
-
-db-patients: ## 🏥 Show patients in database
-	@echo "$(BLUE)🏥 Patients in Database:$(NC)"
-	@docker exec darsinurse-db mysql -u darsinurse -pdarsinurse123 darsinurse -e "SELECT emr_no, nama, jenis_kelamin, poli FROM pasien LIMIT 10;"
-
-# ============================================================
-# SHELL ACCESS
-# ============================================================
-
-shell-app: ## 💻 Open shell in Rawat Jalan container
-	@echo "$(BLUE)💻 Opening Rawat Jalan shell...$(NC)"
+shell-app: ## Open shell in rawat-jalan container
 	docker exec -it darsinurse-app sh
 
-shell-monitoring: ## 💻 Open shell in Monitoring container
-	@echo "$(BLUE)💻 Opening Monitoring shell...$(NC)"
+shell-monitoring: ## Open shell in monitoring container
 	docker exec -it darsinurse-monitoring sh
 
-shell-db: ## 💻 Open shell in Database container
-	@echo "$(BLUE)💻 Opening Database shell...$(NC)"
-	docker exec -it darsinurse-db bash
+shell-db: ## Open MySQL shell
+	docker exec -it darsinurse-db mysql -u root -proot123 darsinurse
 
-# ============================================================
-# DEVELOPMENT
-# ============================================================
-
-install: ## 📦 Install dependencies locally (for development)
-	@echo "$(BLUE)📦 Installing dependencies...$(NC)"
-	@if [ -d "rawat-jalan" ]; then \
-		cd rawat-jalan && npm install && echo "$(GREEN)✅ Rawat Jalan dependencies installed$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠️  rawat-jalan folder not found$(NC)"; \
-	fi
-	@if [ -d "monitoring" ]; then \
-		cd monitoring && npm install && echo "$(GREEN)✅ Monitoring dependencies installed$(NC)"; \
-	else \
-		echo "$(YELLOW)⚠️  monitoring folder not found$(NC)"; \
-	fi
-
-install-app: ## 📦 Install Rawat Jalan dependencies only
-	@echo "$(BLUE)📦 Installing Rawat Jalan dependencies...$(NC)"
+install: ## Install dependencies locally (for development)
+	@echo "📦 Installing dependencies..."
 	cd rawat-jalan && npm install
-	@echo "$(GREEN)✅ Dependencies installed$(NC)"
-
-install-monitoring: ## 📦 Install Monitoring dependencies only
-	@echo "$(BLUE)📦 Installing Monitoring dependencies...$(NC)"
 	cd monitoring && npm install
-	@echo "$(GREEN)✅ Dependencies installed$(NC)"
-
-# ============================================================
-# TESTING
-# ============================================================
-
-test: ## 🧪 Run all tests
-	@echo "$(BLUE)🧪 Running tests...$(NC)"
-	@make test-app
-	@make test-monitoring
-
-test-app: ## 🧪 Test Rawat Jalan
-	@echo "$(BLUE)🧪 Testing Rawat Jalan...$(NC)"
-	@curl -sf http://localhost:4000/health > /dev/null \
-		&& echo "$(GREEN)✅ Rawat Jalan is healthy$(NC)" \
-		|| echo "$(RED)❌ Rawat Jalan is down$(NC)"
-
-test-monitoring: ## 🧪 Test Monitoring
-	@echo "$(BLUE)🧪 Testing Monitoring...$(NC)"
-	@curl -sf http://localhost:5000/health > /dev/null \
-		&& echo "$(GREEN)✅ Monitoring is healthy$(NC)" \
-		|| echo "$(RED)❌ Monitoring is down$(NC)"
-
-test-db: ## 🧪 Test Database connection
-	@echo "$(BLUE)🧪 Testing Database...$(NC)"
-	@docker exec darsinurse-db mysqladmin ping -h localhost -u root -proot123 2>/dev/null \
-		&& echo "$(GREEN)✅ Database is healthy$(NC)" \
-		|| echo "$(RED)❌ Database is down$(NC)"
-
-# ============================================================
-# CLEANUP
-# ============================================================
-
-clean: ## 🧹 Stop and remove all containers, volumes
-	@echo "$(BLUE)🧹 Cleaning up...$(NC)"
-	@echo "$(YELLOW)⚠️  This will remove ALL containers and volumes!$(NC)"
-	@echo "$(YELLOW)⚠️  Press Ctrl+C to cancel, or wait 5 seconds...$(NC)"
-	@sleep 5
-	docker compose down -v
-	@echo "$(GREEN)✅ Cleanup complete!$(NC)"
-
-clean-images: ## 🧹 Remove all images
-	@echo "$(BLUE)🧹 Removing Docker images...$(NC)"
-	docker compose down -v --rmi all
-	@echo "$(GREEN)✅ Images removed!$(NC)"
-
-clean-all: ## 🧹 Complete cleanup (containers, volumes, images, networks)
-	@echo "$(RED)⚠️  DANGER: This will remove EVERYTHING!$(NC)"
-	@echo "$(YELLOW)   - All containers$(NC)"
-	@echo "$(YELLOW)   - All volumes (including database data)$(NC)"
-	@echo "$(YELLOW)   - All images$(NC)"
-	@echo "$(YELLOW)   - All networks$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Press Ctrl+C to cancel, or wait 10 seconds...$(NC)"
-	@sleep 10
-	docker compose down -v --rmi all
-	docker system prune -af --volumes
-	@echo "$(GREEN)✅ Complete cleanup done!$(NC)"
-
-prune: ## 🧹 Prune unused Docker resources
-	@echo "$(BLUE)🧹 Pruning unused Docker resources...$(NC)"
-	docker system prune -f
-	@echo "$(GREEN)✅ Prune complete!$(NC)"
-
-# ============================================================
-# MIGRATION HELPERS
-# ============================================================
-
-migrate: ## 🔄 Show migration guide
-	@echo "$(BLUE)╔════════════════════════════════════════════════╗$(NC)"
-	@echo "$(BLUE)║         MIGRATION TO SEPARATE SERVERS          ║$(NC)"
-	@echo "$(BLUE)╚════════════════════════════════════════════════╝$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Step-by-step guide:$(NC)"
-	@echo ""
-	@echo "1. $(GREEN)Setup folders$(NC)"
-	@echo "   make setup"
-	@echo ""
-	@echo "2. $(GREEN)Copy existing files$(NC)"
-	@echo "   - Move your server.js to rawat-jalan/"
-	@echo "   - Create monitoring/monitoring-server.js"
-	@echo ""
-	@echo "3. $(GREEN)Build images$(NC)"
-	@echo "   make build"
-	@echo ""
-	@echo "4. $(GREEN)Start services$(NC)"
-	@echo "   make up"
-	@echo ""
-	@echo "5. $(GREEN)Test everything$(NC)"
-	@echo "   make test"
-	@echo ""
-	@echo "For detailed guide, see: MIGRATION.md"
-	@echo ""
-
-validate: ## ✅ Validate setup before starting
-	@echo "$(BLUE)✅ Validating setup...$(NC)"
-	@echo ""
-	@if [ ! -f "docker-compose.yml" ]; then \
-		echo "$(RED)❌ docker-compose.yml not found$(NC)"; \
-		exit 1; \
-	else \
-		echo "$(GREEN)✅ docker-compose.yml found$(NC)"; \
-	fi
-	@if [ ! -d "rawat-jalan" ]; then \
-		echo "$(RED)❌ rawat-jalan folder not found$(NC)"; \
-		exit 1; \
-	else \
-		echo "$(GREEN)✅ rawat-jalan folder found$(NC)"; \
-	fi
-	@if [ ! -d "monitoring" ]; then \
-		echo "$(RED)❌ monitoring folder not found$(NC)"; \
-		exit 1; \
-	else \
-		echo "$(GREEN)✅ monitoring folder found$(NC)"; \
-	fi
-	@if [ ! -f "rawat-jalan/Dockerfile" ]; then \
-		echo "$(YELLOW)⚠️  rawat-jalan/Dockerfile not found$(NC)"; \
-	else \
-		echo "$(GREEN)✅ rawat-jalan/Dockerfile found$(NC)"; \
-	fi
-	@if [ ! -f "monitoring/Dockerfile" ]; then \
-		echo "$(YELLOW)⚠️  monitoring/Dockerfile not found$(NC)"; \
-	else \
-		echo "$(GREEN)✅ monitoring/Dockerfile found$(NC)"; \
-	fi
-	@echo ""
-	@echo "$(GREEN)✅ Validation complete!$(NC)"
-
-# ============================================================
-# QUICK ACTIONS
-# ============================================================
-
-quick-start: validate build up health ## 🚀 Quick start (validate + build + up + health)
-
-quick-restart: down up health ## 🔄 Quick restart (down + up + health)
-
-quick-clean: clean build up ## 🧹 Clean rebuild (clean + build + up)
-
-# ============================================================
-# MONITORING & METRICS
-# ============================================================
-
-stats: ## 📊 Show Docker stats
-	@echo "$(BLUE)📊 Container Statistics:$(NC)"
-	docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}\t{{.BlockIO}}"
-
-top: ## 📊 Show running processes in containers
-	@echo "$(BLUE)📊 Running Processes:$(NC)"
-	@echo ""
-	@echo "$(YELLOW)Rawat Jalan:$(NC)"
-	@docker top darsinurse-app 2>/dev/null || echo "  Not running"
-	@echo ""
-	@echo "$(YELLOW)Monitoring:$(NC)"
-	@docker top darsinurse-monitoring 2>/dev/null || echo "  Not running"
-
-inspect-app: ## 🔍 Inspect Rawat Jalan container
-	docker inspect darsinurse-app
-
-inspect-monitoring: ## 🔍 Inspect Monitoring container
-	docker inspect darsinurse-monitoring
-
-# ============================================================
-# UTILITY
-# ============================================================
-
-urls: ## 🔗 Show all access URLs
-	@echo "$(BLUE)🔗 Access URLs:$(NC)"
-	@echo ""
-	@echo "$(GREEN)Rawat Jalan:$(NC)    http://localhost:4000"
-	@echo "$(GREEN)Monitoring:$(NC)     http://localhost:5000"
-	@echo "$(GREEN)phpMyAdmin:$(NC)     http://localhost:8080"
-	@echo "$(GREEN)Metabase:$(NC)       http://localhost:3000"
-	@echo ""
-
-ports: ## 🔌 Show used ports
-	@echo "$(BLUE)🔌 Used Ports:$(NC)"
-	@echo ""
-	@docker compose ps --format "table {{.Name}}\t{{.Ports}}"
-
-version: ## 📌 Show versions
-	@echo "$(BLUE)📌 Darsinurse Gateway$(NC)"
-	@echo "Version: 2.0.0"
-	@echo "Build: $(shell date +%Y%m%d)"
-	@echo ""
-	@docker --version
-	@docker compose --version
-	@node --version 2>/dev/null || echo "Node.js not installed locally"
-
-# ============================================================
-# END OF MAKEFILE
-# ============================================================
+	@echo "✅ Dependencies installed!"
