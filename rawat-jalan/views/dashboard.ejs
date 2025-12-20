@@ -1763,31 +1763,51 @@
     document.getElementById('form-kunjungan').addEventListener('submit', async (e) => {
       e.preventDefault();
       
-      const idKunjungan = document.getElementById('new-id-kunjungan').value;
-      const emrPasien = document.getElementById('new-emr-pasien').value;
-      const keluhan = document.getElementById('new-keluhan').value;
+      const idKunjungan = document.getElementById('new-id-kunjungan').value.trim();
+      const emrPasien = document.getElementById('new-emr-pasien').value.trim();
+      const keluhan = document.getElementById('new-keluhan').value.trim();
       
+      // Validate input tidak kosong
       if (!idKunjungan || !emrPasien) {
         showStatus('kunjungan', '✗ ID Kunjungan dan EMR Pasien harus diisi', 'danger');
         return;
       }
       
-      const valid = await validatePatient(parseInt(emrPasien), 'kunjungan');
+      // Convert to integer
+      const idInt = parseInt(idKunjungan);
+      const emrInt = parseInt(emrPasien);
+      
+      // Validate angka valid
+      if (isNaN(idInt) || isNaN(emrInt)) {
+        showStatus('kunjungan', '✗ ID Kunjungan dan EMR Pasien harus berupa angka', 'danger');
+        addLog('❌ Input tidak valid: ID atau EMR bukan angka', 'error');
+        return;
+      }
+      
+      // Validate positive numbers
+      if (idInt <= 0 || emrInt <= 0) {
+        showStatus('kunjungan', '✗ ID Kunjungan dan EMR Pasien harus angka positif', 'danger');
+        return;
+      }
+      
+      // Validate patient exists (TANPA infinite loop)
+      const valid = await validatePatient(emrInt, 'kunjungan');
       if (!valid) {
-        showStatus('kunjungan', '✗ Pasien tidak ditemukan', 'danger');
+        showStatus('kunjungan', '✗ Pasien tidak ditemukan atau belum terdaftar', 'danger');
         return;
       }
       
       try {
         showStatus('kunjungan', '⏳ Menyimpan kunjungan...', 'info');
+        addLog(`📝 Membuat kunjungan ID ${idInt} untuk EMR ${emrInt}`, 'info');
         
         const response = await fetch('/api/visits', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id_kunjungan: parseInt(idKunjungan),
-            emr_pasien: parseInt(emrPasien),
-            keluhan: keluhan
+            id_kunjungan: idInt,
+            emr_no: emrInt,
+            keluhan: keluhan || ''
           })
         });
         
@@ -1795,26 +1815,27 @@
         
         if (result.success) {
           showStatus('kunjungan', '✓ Kunjungan berhasil dibuat!', 'success');
-          addLog(`Kunjungan baru dibuat: ID ${idKunjungan} untuk EMR ${emrPasien}`, 'success');
+          addLog(`✓ Kunjungan ID ${idInt} berhasil dibuat`, 'success');
           
-          alert('Kunjungan berhasil dibuat!\nAnda bisa langsung melakukan pengukuran.');
+          alert('✓ Kunjungan berhasil dibuat!\n\nAnda bisa langsung melakukan pengukuran.');
           
+          // Reset form
           document.getElementById('form-kunjungan').reset();
           document.getElementById('kunjungan-patient-info').innerHTML = '';
           
+          // Back to menu
           setTimeout(() => {
             backToMenu();
           }, 1000);
         } else {
           showStatus('kunjungan', `✗ Error: ${result.error}`, 'danger');
-          addLog(`Error membuat kunjungan: ${result.error}`, 'error');
+          addLog(`❌ Error membuat kunjungan: ${result.error}`, 'error');
         }
       } catch (err) {
-        showStatus('kunjungan', `✗ Error: ${err.message}`, 'danger');
-        addLog(`Network error: ${err.message}`, 'error');
+        showStatus('kunjungan', `✗ Network Error: ${err.message}`, 'danger');
+        addLog(`❌ Network error: ${err.message}`, 'error');
       }
     });
-
     // Auto-validate patient when EMR is entered in kunjungan form
     document.getElementById('new-emr-pasien').addEventListener('blur', async function() {
       const emr = parseInt(this.value);
