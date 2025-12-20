@@ -1,9 +1,3 @@
-
-# ============================================================
-# PACKAGE.JSON - MONITORING
-# Save as: monitoring/package.json
-# ============================================================
-
 {
   "name": "darsinurse-monitoring",
   "version": "2.0.0",
