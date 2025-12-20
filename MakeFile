@@ -366,11 +366,11 @@ migrate: ## 🔄 Show migration guide
 validate: ## ✅ Validate setup before starting
 	@echo "$(BLUE)✅ Validating setup...$(NC)"
 	@echo ""
-	@if [ ! -f "docker compose.yml" ]; then \
-		echo "$(RED)❌ docker compose.yml not found$(NC)"; \
+	@if [ ! -f "docker-compose.yml" ]; then \
+		echo "$(RED)❌ docker-compose.yml not found$(NC)"; \
 		exit 1; \
 	else \
-		echo "$(GREEN)✅ docker compose.yml found$(NC)"; \
+		echo "$(GREEN)✅ docker-compose.yml found$(NC)"; \
 	fi
 	@if [ ! -d "rawat-jalan" ]; then \
 		echo "$(RED)❌ rawat-jalan folder not found$(NC)"; \
