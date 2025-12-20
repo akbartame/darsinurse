@@ -1565,6 +1565,43 @@
       const statusDiv = document.getElementById(`${type}-status`);
       statusDiv.innerHTML = `<div class="alert alert-${alertType}">${message}</div>`;
     }
+    // ==== VALIDATE PATIENT ====
+    async function validatePatient(emrPasien, type) {
+      try {
+        const response = await fetch(`/validasi_pasien/${emrPasien}`);
+        const result = await response.json();
+
+        const infoDiv = document.getElementById(`${type}-patient-info`);
+        
+        if (result.valid) {
+          currentPatients[type] = emrPasien;
+          infoDiv.innerHTML = `<div class="patient-info mt-2">✓ <strong>${result.pasien.nama}</strong><br><small>Poli: ${result.pasien.poli} | ${result.pasien.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</small></div>`;
+          addLog(`Pasien ditemukan: ${result.pasien.nama} (EMR: ${emrPasien})`, 'success');
+          return true;
+        } else {
+          // SPECIAL HANDLING untuk form kunjungan - tawarkan daftar pasien baru
+          if (type === 'kunjungan') {
+            infoDiv.innerHTML = `
+              <div class="alert alert-warning mt-2">
+                ⚠ Pasien dengan EMR ${emrPasien} belum terdaftar.
+                <button type="button" class="btn btn-primary btn-sm mt-2" onclick="showFormPasienBaru(${emrPasien})">
+                  <i class="fas fa-user-plus"></i> Daftar Pasien Baru
+                </button>
+              </div>`;
+            addLog(`Pasien EMR ${emrPasien} tidak ditemukan - silakan daftar`, 'error');
+          } else {
+            infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Pasien dengan EMR ${emrPasien} tidak ditemukan. Daftarkan pasien lewat menu Kunjungan Baru.</div>`;
+            addLog(`Pasien EMR ${emrPasien} tidak ditemukan`, 'error');
+          }
+          return false;
+        }
+      } catch (err) {
+        const infoDiv = document.getElementById(`${type}-patient-info`);
+        infoDiv.innerHTML = `<div class="alert alert-danger mt-2">✗ Error: ${err.message}</div>`;
+        addLog('Error validasi: ' + err.message, 'error');
+        return false;
+      }
+    }
 
     // ==== STOP CONNECTION ====
     function stopConnection(type) {
