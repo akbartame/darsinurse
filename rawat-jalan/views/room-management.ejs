@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manajemen Ruangan - Darsinurse</title>
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🏥</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --primary-green: #00B14F;
+      --secondary-teal: #20c997;
+      --primary-blue: #0056b3;
+      --danger-red: #dc3545;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #f0f8f7 0%, #e6f7ff 100%);
+      min-height: 100vh;
+    }
+
+    .top-header {
+      background: white;
+      padding: 1rem 0;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .logo-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-info i {
+      font-size: 32px;
+      color: var(--primary-green);
+    }
+
+    .logo-info h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1a3a3a;
+      margin: 0;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      font-size: 14px;
+    }
+
+    .user-info a {
+      color: var(--primary-blue);
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .user-info a:hover {
+      color: var(--primary-green);
+    }
+
+    .main-container {
+      padding: 30px 0;
+    }
+
+    .page-title {
+      background: white;
+      padding: 25px;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+
+    .page-title h2 {
+      margin: 0;
+      color: #1a3a3a;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .page-title h2 i {
+      color: var(--primary-green);
+      font-size: 36px;
+    }
+
+    .btn-add-room {
+      background: var(--primary-green);
+      border: none;
+      padding: 12px 25px;
+      border-radius: 10px;
+      color: white;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .btn-add-room:hover {
+      background: var(--secondary-teal);
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(0,177,79,0.3);
+    }
+
+    .room-card {
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      transition: all 0.3s;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .room-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+
+    .room-header {
+      padding: 20px;
+      color: white;
+      position: relative;
+    }
+
+    .room-header.occupied {
+      background: linear-gradient(135deg, #0056b3 0%, #003d7a 100%);
+    }
+
+    .room-header.empty {
+      background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    }
+
+    .room-status-badge {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(10px);
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .room-id {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .room-body {
+      padding: 20px;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .info-row i {
+      color: var(--primary-green);
+      width: 20px;
+    }
+
+    .info-label {
+      font-weight: 600;
+      color: #666;
+      min-width: 100px;
+    }
+
+    .info-value {
+      color: #1a3a3a;
+      font-weight: 500;
+    }
+
+    .room-actions {
+      display: flex;
+      gap: 10px;
+      padding-top: 15px;
+      border-top: 2px solid #f0f0f0;
+    }
+
+    .btn-room-action {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: all 0.3s;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn-assign {
+      background: var(--primary-blue);
+      color: white;
+    }
+
+    .btn-assign:hover {
+      background: #003d7a;
+      transform: translateY(-2px);
+    }
+
+    .btn-remove {
+      background: #fd7e14;
+      color: white;
+    }
+
+    .btn-remove:hover {
+      background: #e56910;
+      transform: translateY(-2px);
+    }
+
+    .btn-edit {
+      background: #17a2b8;
+      color: white;
+    }
+
+    .btn-edit:hover {
+      background: #117a8b;
+    }
+
+    .btn-delete {
+      background: var(--danger-red);
+      color: white;
+    }
+
+    .btn-delete:hover {
+      background: #c82333;
+    }
+
+    .modal {
+      backdrop-filter: blur(5px);
+    }
+
+    .modal-content {
+      border-radius: 15px;
+      border: none;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+
+    .modal-header {
+      background: linear-gradient(135deg, var(--primary-green) 0%, var(--secondary-teal) 100%);
+      color: white;
+      border-radius: 15px 15px 0 0;
+      padding: 20px;
+    }
+
+    .modal-title {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-close {
+      filter: brightness(0) invert(1);
+    }
+
+    .form-label {
+      font-weight: 600;
+      color: #1a3a3a;
+      margin-bottom: 8px;
+    }
+
+    .form-control, .form-select {
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px 15px;
+      transition: all 0.3s;
+    }
+
+    .form-control:focus, .form-select:focus {
+      border-color: var(--primary-green);
+      box-shadow: 0 0 0 0.2rem rgba(0,177,79,0.15);
+    }
+
+    .alert {
+      border-radius: 10px;
+      border: none;
+      padding: 15px 20px;
+      margin-bottom: 20px;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      background: white;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    .empty-state i {
+      font-size: 64px;
+      color: #ddd;
+      margin-bottom: 20px;
+    }
+
+    .empty-state h3 {
+      color: #666;
+      margin-bottom: 10px;
+    }
+
+    .empty-state p {
+      color: #999;
+      margin-bottom: 25px;
+    }
+
+    @media (max-width: 768px) {
+      .room-actions {
+        flex-direction: column;
+      }
+
+      .btn-room-action {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="top-header">
+    <div class="container-fluid">
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="logo-info">
+          <i class="fas fa-hospital"></i>
+          <div>
+            <h1>Darsinurse Gateway</h1>
+            <small class="text-muted">Manajemen Ruangan</small>
+          </div>
+        </div>
+        <div class="user-info">
+          <span><i class="fas fa-user-nurse"></i> <%= nama_perawat %></span>
+          <span>|</span>
+          <a href="/dashboard"><i class="fas fa-home"></i> Dashboard</a>
+          <span>|</span>
+          <a href="/logout" onclick="return confirm('Yakin logout?')">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="container-fluid main-container">
+    <div class="page-title">
+      <div class="d-flex justify-content-between align-items-center">
+        <h2>
+          <i class="fas fa-door-open"></i>
+          Manajemen Ruangan
+        </h2>
+        <button class="btn btn-add-room" onclick="showAddRoomModal()">
+          <i class="fas fa-plus"></i> Tambah Ruangan
+        </button>
+      </div>
+    </div>
+
+    <!-- Alert Messages -->
+    <div id="alert-container"></div>
+
+    <!-- Room Cards Container -->
+    <div class="row" id="rooms-container">
+      <div class="col-12">
+        <div class="text-center">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <p class="mt-2">Memuat data ruangan...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Add Room -->
+  <div class="modal fade" id="addRoomModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-plus-circle"></i>
+            Tambah Ruangan Baru
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="form-add-room">
+            <div class="mb-3">
+              <label class="form-label">Room ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="add-room-id" placeholder="Contoh: EXECUTIVE_4" required>
+              <small class="text-muted">ID unik untuk ruangan</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Device ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="add-device-id" placeholder="Contoh: DEVICE_004" required>
+              <small class="text-muted">ID perangkat monitoring</small>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Pasien (Opsional)</label>
+              <select class="form-select" id="add-emr-no">
+                <option value="">-- Ruangan Kosong --</option>
+              </select>
+              <small class="text-muted">Bisa diisi kemudian</small>
+            </div>
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-save"></i> Simpan Ruangan
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times"></i> Batal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Room -->
+  <div class="modal fade" id="editRoomModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-edit"></i>
+            Edit Ruangan
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="form-edit-room">
+            <input type="hidden" id="edit-old-room-id">
+            <div class="mb-3">
+              <label class="form-label">Room ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="edit-room-id" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Device ID <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="edit-device-id" required>
+            </div>
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Update Ruangan
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times"></i> Batal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Assign Patient -->
+  <div class="modal fade" id="assignPatientModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-user-plus"></i>
+            Masukkan Pasien ke Ruangan
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            Ruangan: <strong id="assign-room-display"></strong>
+          </div>
+          <form id="form-assign-patient">
+            <input type="hidden" id="assign-room-id">
+            <div class="mb-3">
+              <label class="form-label">Pilih Pasien <span class="text-danger">*</span></label>
+              <select class="form-select" id="assign-emr-no" required>
+                <option value="">-- Pilih Pasien --</option>
+              </select>
+              <small class="text-muted">Hanya menampilkan pasien yang belum ada di ruangan</small>
+            </div>
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-check"></i> Masukkan Pasien
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times"></i> Batal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // ============================================
+    // GLOBAL VARIABLES
+    // ============================================
+    let rooms = [];
+    let availablePatients = [];
+    const addRoomModal = new bootstrap.Modal(document.getElementById('addRoomModal'));
+    const editRoomModal = new bootstrap.Modal(document.getElementById('editRoomModal'));
+    const assignPatientModal = new bootstrap.Modal(document.getElementById('assignPatientModal'));
+
+    // ============================================
+    // LOAD DATA
+    // ============================================
+    async function loadRooms() {
+      try {
+        const response = await fetch('/api/rooms');
+        const result = await response.json();
+        
+        if (result.success) {
+          rooms = result.rooms;
+          renderRooms();
+        } else {
+          showAlert('danger', 'Gagal memuat data ruangan');
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    }
+
+    async function loadAvailablePatients() {
+      try {
+        const response = await fetch('/api/rooms/available-patients');
+        const result = await response.json();
+        
+        if (result.success) {
+          availablePatients = result.patients;
+          populatePatientDropdowns();
+        }
+      } catch (error) {
+        console.error('Error loading patients:', error);
+      }
+    }
+
+    function populatePatientDropdowns() {
+      const addSelect = document.getElementById('add-emr-no');
+      const assignSelect = document.getElementById('assign-emr-no');
+      
+      const options = availablePatients.map(p => 
+        `<option value="${p.emr_no}">${p.nama} (EMR: ${p.emr_no}) - ${p.poli}</option>`
+      ).join('');
+      
+      addSelect.innerHTML = '<option value="">-- Ruangan Kosong --</option>' + options;
+      assignSelect.innerHTML = '<option value="">-- Pilih Pasien --</option>' + options;
+    }
+
+    // ============================================
+    // RENDER ROOMS
+    // ============================================
+    function renderRooms() {
+      const container = document.getElementById('rooms-container');
+      
+      if (rooms.length === 0) {
+        container.innerHTML = `
+          <div class="col-12">
+            <div class="empty-state">
+              <i class="fas fa-door-open"></i>
+              <h3>Belum Ada Ruangan</h3>
+              <p>Mulai dengan menambahkan ruangan baru</p>
+              <button class="btn btn-add-room" onclick="showAddRoomModal()">
+                <i class="fas fa-plus"></i> Tambah Ruangan Pertama
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const html = rooms.map(room => {
+        const isOccupied = room.emr_no !== null;
+        const statusClass = isOccupied ? 'occupied' : 'empty';
+        const statusText = isOccupied ? 'TERISI' : 'KOSONG';
+        const icon = isOccupied ? 'fa-door-closed' : 'fa-door-open';
+        
+        return `
+          <div class="col-md-6 col-lg-4">
+            <div class="room-card">
+              <div class="room-header ${statusClass}">
+                <span class="room-status-badge">${statusText}</span>
+                <h3 class="room-id">
+                  <i class="fas ${icon}"></i>
+                  ${room.room_id}
+                </h3>
+              </div>
+              <div class="room-body">
+                <div class="info-row">
+                  <i class="fas fa-microchip"></i>
+                  <span class="info-label">Device ID:</span>
+                  <code class="info-value">${room.device_id}</code>
+                </div>
+                
+                ${isOccupied ? `
+                  <div class="info-row">
+                    <i class="fas fa-user"></i>
+                    <span class="info-label">Pasien:</span>
+                    <span class="info-value">${room.nama_pasien}</span>
+                  </div>
+                  <div class="info-row">
+                    <i class="fas fa-id-card"></i>
+                    <span class="info-label">EMR:</span>
+                    <span class="info-value">${room.emr_no}</span>
+                  </div>
+                  <div class="info-row">
+                    <i class="fas fa-hospital"></i>
+                    <span class="info-label">Poli:</span>
+                    <span class="info-value">${room.poli}</span>
+                  </div>
+                  <div class="info-row">
+                    <i class="fas fa-clock"></i>
+                    <span class="info-label">Masuk:</span>
+                    <span class="info-value">${formatDate(room.assigned_at)}</span>
+                  </div>
+                ` : `
+                  <div class="alert alert-secondary mb-0">
+                    <i class="fas fa-info-circle"></i> Ruangan masih kosong
+                  </div>
+                `}
+                
+                <div class="room-actions">
+                  ${isOccupied ? `
+                    <button class="btn-room-action btn-remove" onclick="removePatient('${room.room_id}')">
+                      <i class="fas fa-door-open"></i> Keluarkan
+                    </button>
+                  ` : `
+                    <button class="btn-room-action btn-assign" onclick="showAssignModal('${room.room_id}')">
+                      <i class="fas fa-user-plus"></i> Masukkan Pasien
+                    </button>
+                  `}
+                  <button class="btn-room-action btn-edit" onclick="showEditModal('${room.room_id}', '${room.device_id}')">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button class="btn-room-action btn-delete" onclick="deleteRoom('${room.room_id}')">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      container.innerHTML = html;
+    }
+
+    // ============================================
+    // MODAL FUNCTIONS
+    // ============================================
+    function showAddRoomModal() {
+      document.getElementById('form-add-room').reset();
+      loadAvailablePatients();
+      addRoomModal.show();
+    }
+
+    function showEditModal(roomId, deviceId) {
+      document.getElementById('edit-old-room-id').value = roomId;
+      document.getElementById('edit-room-id').value = roomId;
+      document.getElementById('edit-device-id').value = deviceId;
+      editRoomModal.show();
+    }
+
+    function showAssignModal(roomId) {
+      document.getElementById('assign-room-id').value = roomId;
+      document.getElementById('assign-room-display').textContent = roomId;
+      loadAvailablePatients();
+      assignPatientModal.show();
+    }
+
+    // ============================================
+    // FORM HANDLERS
+    // ============================================
+    document.getElementById('form-add-room').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const roomId = document.getElementById('add-room-id').value.trim();
+      const deviceId = document.getElementById('add-device-id').value.trim();
+      const emrNo = document.getElementById('add-emr-no').value;
+      
+      try {
+        const response = await fetch('/api/rooms/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_id: roomId,
+            device_id: deviceId,
+            emr_no: emrNo || null
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          addRoomModal.hide();
+          loadRooms();
+          loadAvailablePatients();
+        } else {
+          showAlert('danger', result.error);
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    });
+
+    document.getElementById('form-edit-room').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const oldRoomId = document.getElementById('edit-old-room-id').value;
+      const newRoomId = document.getElementById('edit-room-id').value.trim();
+      const deviceId = document.getElementById('edit-device-id').value.trim();
+      
+      try {
+        const response = await fetch(`/api/rooms/${oldRoomId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            new_room_id: newRoomId,
+            device_id: deviceId
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          editRoomModal.hide();
+          loadRooms();
+        } else {
+          showAlert('danger', result.error);
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    });
+
+    document.getElementById('form-assign-patient').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const roomId = document.getElementById('assign-room-id').value;
+      const emrNo = document.getElementById('assign-emr-no').value;
+      
+      if (!emrNo) {
+        showAlert('warning', 'Silakan pilih pasien');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/rooms/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_id: roomId,
+            emr_no: parseInt(emrNo)
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          assignPatientModal.hide();
+          loadRooms();
+          loadAvailablePatients();
+        } else {
+          showAlert('danger', result.error);
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    });
+
+    // ============================================
+    // ACTION FUNCTIONS
+    // ============================================
+    async function removePatient(roomId) {
+      if (!confirm(`Apakah Anda yakin ingin mengeluarkan pasien dari ruangan ${roomId}?`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/rooms/remove-patient', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_id: roomId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          loadRooms();
+          loadAvailablePatients();
+        } else {
+          showAlert('danger', result.error);
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    }
+
+    async function deleteRoom(roomId) {
+      if (!confirm(`Apakah Anda yakin ingin menghapus ruangan ${roomId}?\n\nRuangan harus kosong untuk dihapus.`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/rooms/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ room_id: roomId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showAlert('success', result.message);
+          loadRooms();
+        } else {
+          showAlert('danger', result.error);
+        }
+      } catch (error) {
+        showAlert('danger', 'Error: ' + error.message);
+      }
+    }
+
+    // ============================================
+    // UTILITY FUNCTIONS
+    // ============================================
+    function showAlert(type, message) {
+      const container = document.getElementById('alert-container');
+      const alertDiv = document.createElement('div');
+      alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+      alertDiv.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      `;
+      
+      container.appendChild(alertDiv);
+      
+      setTimeout(() => {
+        alertDiv.remove();
+      }, 5000);
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return '-';
+      const date = new Date(dateString);
+      return date.toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // ============================================
+    // INITIALIZE ON PAGE LOAD
+    // ============================================
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('✓ Room Management Page Loaded');
+      loadRooms();
+      loadAvailablePatients();
+    });
+  </script>
+</body>
+</html>

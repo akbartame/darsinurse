@@ -29,14 +29,22 @@ const hashPassword = (password) => {
 /* ============================================================
    DATABASE CONNECTION (MySQL)
    ============================================================ */
+
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'darsinurse_rawatjalan',
   waitForConnections: true,
-  connectionLimit: 10
+  connectionLimit: 20,              // Increase dari 10 → 20
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  maxIdle: 10,                      // Jumlah koneksi idle yang dipertahankan
+  idleTimeout: 60000,               // Timeout untuk idle connections
+  acquireTimeout: 30000             // Timeout untuk mendapatkan koneksi
 });
+
 
 // Cek koneksi
 pool.getConnection()
@@ -453,6 +461,10 @@ io.on('connection', (socket) => {
     console.log('❌ Client disconnected:', socket.id);
   });
   
+  socket.on('new-fall-alert', (alert) => {
+    console.log('🚨 FALL ALERT FROM RAWAT-JALAN:', alert);
+    io.to('monitoring-room').emit('fall-alert', alert);
+  });
   socket.on('join-monitoring', (data) => {
     socket.join('monitoring-room');
     console.log('👀 Client joined monitoring room:', data);
