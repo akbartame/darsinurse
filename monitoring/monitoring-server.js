@@ -93,12 +93,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
-  resave: false,
-  saveUninitialized: false,
+  resave: true,  // ← BERUBAH
+  saveUninitialized: true,  // ← BERUBAH
   cookie: { 
     httpOnly: true, 
-    secure: process.env.NODE_ENV === 'production', // ← TRUE in production
-    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',  // ← BERUBAH
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
@@ -204,6 +204,13 @@ app.post('/login', async (req, res) => {
       req.session.role = user.role;
       
       console.log('✓ Monitoring Login success:', user.nama);
+      req.session.save((err) => {
+          if (err) {
+            console.error('❌ Session save error:', err);
+            return res.render('monitoring-login', { error: 'Terjadi kesalahan sistem!' });
+          }
+          return res.redirect('/');  // Redirect setelah session tersave
+        });
       return res.redirect('/');
     } else {
       console.log('❌ Wrong password for:', emrInt);
