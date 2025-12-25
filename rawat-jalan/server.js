@@ -198,25 +198,77 @@ async function optimizeDatabase() {
   const conn = await pool.getConnection();
   
   try {
-    // Index untuk query yang sering dipanggil
-    await conn.query(`
-      CREATE INDEX IF NOT EXISTS idx_kunjungan_emr_perawat 
-      ON kunjungan(emr_perawat, tanggal_kunjungan);
-    `);
+    console.log('🔧 Optimizing database indexes...');
     
-    await conn.query(`
-      CREATE INDEX IF NOT EXISTS idx_kunjungan_status 
-      ON kunjungan(status, tanggal_kunjungan);
-    `);
+    // ✅ FIX: Gunakan syntax yang kompatibel dengan MySQL lama
+    // Caranya: Cek apakah index sudah ada sebelum create
     
-    await conn.query(`
-      CREATE INDEX IF NOT EXISTS idx_vitals_waktu 
-      ON vitals(waktu DESC);
-    `);
+    // Index 1: kunjungan table
+    try {
+      const [indexCheck1] = await conn.query(`
+        SELECT COUNT(*) as cnt FROM information_schema.STATISTICS 
+        WHERE TABLE_NAME = 'kunjungan' 
+        AND INDEX_NAME = 'idx_kunjungan_emr_perawat'
+      `);
+      
+      if (indexCheck1[0].cnt === 0) {
+        await conn.query(`
+          CREATE INDEX idx_kunjungan_emr_perawat 
+          ON kunjungan(emr_perawat, tanggal_kunjungan)
+        `);
+        console.log('  ✓ Created idx_kunjungan_emr_perawat');
+      } else {
+        console.log('  ✓ Index idx_kunjungan_emr_perawat already exists');
+      }
+    } catch (err) {
+      console.warn('  ⚠️ Could not create idx_kunjungan_emr_perawat:', err.message);
+    }
     
-    console.log('✓ Database indexes optimized');
+    // Index 2: kunjungan status
+    try {
+      const [indexCheck2] = await conn.query(`
+        SELECT COUNT(*) as cnt FROM information_schema.STATISTICS 
+        WHERE TABLE_NAME = 'kunjungan' 
+        AND INDEX_NAME = 'idx_kunjungan_status'
+      `);
+      
+      if (indexCheck2[0].cnt === 0) {
+        await conn.query(`
+          CREATE INDEX idx_kunjungan_status 
+          ON kunjungan(status, tanggal_kunjungan)
+        `);
+        console.log('  ✓ Created idx_kunjungan_status');
+      } else {
+        console.log('  ✓ Index idx_kunjungan_status already exists');
+      }
+    } catch (err) {
+      console.warn('  ⚠️ Could not create idx_kunjungan_status:', err.message);
+    }
+    
+    // Index 3: vitals waktu
+    try {
+      const [indexCheck3] = await conn.query(`
+        SELECT COUNT(*) as cnt FROM information_schema.STATISTICS 
+        WHERE TABLE_NAME = 'vitals' 
+        AND INDEX_NAME = 'idx_vitals_waktu'
+      `);
+      
+      if (indexCheck3[0].cnt === 0) {
+        await conn.query(`
+          CREATE INDEX idx_vitals_waktu 
+          ON vitals(waktu DESC)
+        `);
+        console.log('  ✓ Created idx_vitals_waktu');
+      } else {
+        console.log('  ✓ Index idx_vitals_waktu already exists');
+      }
+    } catch (err) {
+      console.warn('  ⚠️ Could not create idx_vitals_waktu:', err.message);
+    }
+    
+    console.log('✓ Database optimization complete');
   } catch (err) {
-    console.error('Index creation error:', err);
+    console.error('❌ Database optimization error:', err);
   } finally {
     conn.release();
   }
@@ -843,7 +895,7 @@ const io = socketIo(server, {
 console.log('✓ Socket.IO server initialized with CORS:', io.opts.cors);
 
 // ✅ FIX: Connect to monitoring server with better error handling
-const MONITORING_SERVER = process.env.MONITORING_URL || 'https://darsinurse.hint-lab.id';
+const MONITORING_SERVER = process.env.MONITORING_URL || 'http://darsinurse-monitoring:5000';
 
 console.log(`🔄 Connecting to Monitoring Server: ${MONITORING_SERVER}`);
 
@@ -853,19 +905,27 @@ const monitoringSocket = ioClient(MONITORING_SERVER, {
   reconnectionDelayMax: 10000,
   reconnectionAttempts: Infinity,
   timeout: 30000,
-  transports: ['websocket', 'polling'], // ✅ Try websocket first, fallback to polling
+  transports: ['websocket', 'polling'],  // ✅ Websocket first, polling fallback
   autoConnect: true,
   forceNew: false,
-  // ✅ Add path if needed
-  path: '/socket.io/'
+  path: '/socket.io/',
+  
+  // ✅ TAMBAHAN: Extra connection options untuk reliability
+  secure: false,                          // ← Tidak gunakan HTTPS untuk internal
+  rejectUnauthorized: false,
+  reconnectionDelayMax: 10000,
+  reconnectionDelay: 1000
 });
 
-let monitoringConnected = false;
+// ✅ TAMBAHAN: Connection handlers dengan logging detail
+let connectionAttempt = 0;
 
 monitoringSocket.on('connect', () => {
-  console.log('✅ Connected to Monitoring Server');
+  connectionAttempt = 0;  // Reset counter saat berhasil
+  console.log('✅ BERHASIL! Connected to Monitoring Server');
   console.log('   Socket ID:', monitoringSocket.id);
   console.log('   Transport:', monitoringSocket.io.engine.transport.name);
+  console.log('   URL:', MONITORING_SERVER);
   monitoringConnected = true;
   
   monitoringSocket.emit('join-monitoring', {
@@ -876,39 +936,38 @@ monitoringSocket.on('connect', () => {
 });
 
 monitoringSocket.on('connect_error', (error) => {
-  console.error('❌ Monitoring Server connection error:', error.message);
-  monitoringConnected = false;
-  
-  // ✅ Log detailed error info
+  connectionAttempt++;
+  console.error(`❌ Connection attempt #${connectionAttempt} FAILED`);
+  console.error('   Error message:', error.message);
   console.error('   Error type:', error.type);
-  console.error('   Error description:', error.description);
-  
-  // ✅ Will retry automatically due to reconnection settings
-  console.log('   ⏳ Will retry in', monitoringSocket.io.backoff.ms / 1000, 'seconds...');
+  console.error('   Monitoring Server URL:', MONITORING_SERVER);
+  console.error('   Will retry...');
+  monitoringConnected = false;
 });
 
 monitoringSocket.on('disconnect', (reason) => {
-  console.warn('⚠️ Disconnected from Monitoring Server');
+  console.warn('⚠️ DISCONNECTED from Monitoring Server');
   console.log('   Reason:', reason);
   monitoringConnected = false;
   
-  // ✅ Attempt manual reconnect if server initiated disconnect
   if (reason === 'io server disconnect') {
-    console.log('   🔄 Attempting manual reconnect...');
+    console.log('   🔄 Server requested disconnect, attempting manual reconnect...');
     setTimeout(() => {
       monitoringSocket.connect();
-    }, 1000);
+    }, 2000);
   }
 });
 
 monitoringSocket.on('reconnect', (attemptNumber) => {
-  console.log('🔄 Reconnected to Monitoring Server');
-  console.log('   Attempts:', attemptNumber);
-  console.log('   Transport:', monitoringSocket.io.engine.transport.name);
+  console.log('🔄 RECONNECTED to Monitoring Server');
+  console.log('   Attempt number:', attemptNumber);
+  console.log('   Socket ID:', monitoringSocket.id);
+  monitoringConnected = true;
 });
 
 monitoringSocket.on('reconnect_attempt', (attemptNumber) => {
-  console.log(`🔄 Reconnection attempt ${attemptNumber}...`);
+  console.log(`🔄 Reconnection attempt #${attemptNumber}...`);
+  console.log('   URL:', MONITORING_SERVER);
 });
 
 monitoringSocket.on('reconnect_error', (error) => {
@@ -917,7 +976,16 @@ monitoringSocket.on('reconnect_error', (error) => {
 
 monitoringSocket.on('reconnect_failed', () => {
   console.error('❌ All reconnection attempts failed');
+  console.error('   Please check:');
+  console.error('   1. Monitoring server is running (docker ps)');
+  console.error('   2. Network connectivity (docker network ls)');
+  console.error('   3. Monitoring server logs (docker logs darsinurse-monitoring)');
 });
+
+monitoringSocket.on('error', (error) => {
+  console.error('❌ Socket.IO error:', error);
+});
+
 
 // ✅ Fall alert listeners
 monitoringSocket.on('new-fall-alert', (alert) => {
