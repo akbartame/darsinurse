@@ -34,7 +34,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'darsinurse_rawatjalan',
+  database: process.env.DB_NAME || 'darsinurse',
   waitForConnections: true,
   connectionLimit: 20,              // Increase dari 10 → 20
   queueLimit: 0,
@@ -460,16 +460,23 @@ const io = socketIo(server, {
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
   
+  // Auto-join monitoring room
+  socket.join('monitoring-room');
+  
   socket.on('disconnect', () => {
     console.log('❌ Client disconnected:', socket.id);
   });
   
-  // TERIMA fall alert dari Rawat Jalan
+  // TERIMA fall alert dari Rawat Jalan - gunakan event yang SAMA
   socket.on('new-fall-alert', (alert) => {
     console.log('🚨 FALL ALERT RECEIVED:', alert);
+    console.log('📤 Broadcasting to all clients...');
     
-    // Broadcast ke SEMUA client yang connected
-    io.emit('fall-alert-broadcast', alert);
+    // Broadcast ke SEMUA client dengan event 'fall-alert'
+    io.emit('fall-alert', alert);
+    
+    // Log jumlah client
+    console.log('👥 Total connected clients:', io.engine.clientsCount);
   });
   
   // TERIMA acknowledge dari Rawat Jalan
@@ -479,8 +486,7 @@ io.on('connection', (socket) => {
   });
   
   socket.on('join-monitoring', (data) => {
-    socket.join('monitoring-room');
-    console.log('👀 Gateway connected:', data);
+    console.log('👀 Monitoring dashboard joined:', data);
   });
 });
 

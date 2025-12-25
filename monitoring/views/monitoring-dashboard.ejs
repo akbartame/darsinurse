@@ -778,22 +778,35 @@
     // ============================================
 
     // Initialize Socket.IO connection
+  // Initialize Socket.IO connection
     const socket = io({
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5
     });
 
-    // Connection event handlers
+    // Connection handlers
+    socket.on('connect', () => {
+      console.log('✓ Socket.IO connected:', socket.id);
+      socket.emit('join-monitoring', { 
+        perawat: '<%= nama_perawat %>',
+        timestamp: new Date().toISOString() 
+      });
+    });
+
+    socket.on('disconnect', () => {
+      console.warn('⚠️ Socket.IO disconnected');
+    });
+
     socket.on('connect_error', (error) => {
       console.error('❌ Socket connection error:', error);
-      addLog('Koneksi monitoring terputus - coba reload', 'error');
-      // Retry otomatis
       setTimeout(() => socket.connect(), 3000);
     });
 
+    // FALL ALERT LISTENER - gunakan event 'fall-alert'
     socket.on('fall-alert', (alert) => {
       console.log('🚨 FALL ALERT RECEIVED:', alert);
+      console.log('Alert data:', JSON.stringify(alert, null, 2));
       
       // Validasi alert object
       if (!alert || !alert.nama_pasien) {
@@ -803,9 +816,16 @@
       
       playAlertSound();
       showFallAlert(alert);
-      addLog(`🚨 FALL DETECTED: ${alert.nama_pasien}`, 'error');
+      
+      // Show browser notification if supported
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("🚨 FALL DETECTED!", {
+          body: `Pasien: ${alert.nama_pasien} - Room: ${alert.room_id}`,
+          icon: '/images/alert-icon.png',
+          requireInteraction: true
+        });
+      }
     });
-
     // ============================================
     // ALERT FUNCTIONS
     // ============================================
@@ -1264,13 +1284,43 @@
     document.addEventListener('DOMContentLoaded', function() {
         console.log('✓ Page loaded, initializing...');
         
+        // Request notification permission
+        if ("Notification" in window && Notification.permission === "default") {
+          Notification.requestPermission().then(permission => {
+            console.log('📢 Notification permission:', permission);
+          });
+        }
+        
         // Audio unlock banner
         setTimeout(() => {
             if (!audioUnlocked) {
             console.warn('⚠️ Click anywhere to enable alert sounds');
+            const banner = document.createElement('div');
+            banner.style.cssText = `
+              position: fixed;
+              top: 70px;
+              left: 50%;
+              transform: translateX(-50%);
+              background: #ff9800;
+              color: white;
+              padding: 10px 20px;
+              border-radius: 6px;
+              z-index: 9998;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+              font-size: 14px;
+              font-weight: 600;
+            `;
+            banner.innerHTML = '🔊 Klik di mana saja untuk mengaktifkan suara alert';
+            banner.onclick = () => {
+              unlockAudio();
+              banner.remove();
+            };
+            document.body.appendChild(banner);
+            
+            setTimeout(() => banner.remove(), 10000);
             }
         }, 3000);
-        
+
         // Validate elements
         const requiredElements = [
             'total-visits',
