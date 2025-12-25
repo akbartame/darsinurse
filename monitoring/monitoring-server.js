@@ -1,12 +1,10 @@
 /* ============================================================
-   DARSINURSE GATEWAY - MONITORING SERVER (SEPARATE)
-   Node.js + Express + Socket.IO - Monitoring Dashboard
-   © 2025 - Darsinurse System
-   Port: 5000 (atau sesuai kebutuhan)
+   DARSINURSE GATEWAY - MONITORING SERVER (FIXED)
    ============================================================ */
 
 const express = require('express');
 const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
 const bodyParser = require('body-parser');
 const mysql = require('mysql2/promise');
 const path = require('path');
@@ -19,7 +17,6 @@ const { io: io_client } = require('socket.io-client');
 
 const app = express();
 const PORT = process.env.MONITORING_PORT || 5000;
-
 
 /* ============================================================
    HASH FUNCTION
@@ -38,20 +35,31 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'darsinurse',
   waitForConnections: true,
-  connectionLimit: 20,              // Increase dari 10 → 20
+  connectionLimit: 20,
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
-
 });
 
-// Cek koneksi
+// Session Store Configuration
+const sessionStore = new MySQLStore({
+  clearExpired: true,
+  checkExpirationInterval: 900000, // 15 minutes
+  expiration: 86400000, // 1 day
+  createDatabaseTable: true,
+  schema: {
+    tableName: 'sessions',
+    columnNames: {
+      session_id: 'session_id',
+      expires: 'expires',
+      data: 'data'
+    }
+  }
+}, pool);
+
+// Check pool connection
 pool.on('error', (err) => {
   console.error('❌ MySQL Pool Error:', err);
-  // Jangan exit, coba reconnect
-  if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-    console.log('Attempting reconnection...');
-  }
 });
 
 pool.on('connection', (connection) => {
@@ -62,29 +70,44 @@ pool.on('connection', (connection) => {
    MIDDLEWARE SETUP - CORRECT ORDER!
    ============================================================ */
 
-// 1️⃣ BODY PARSER (FIRST)
+// 1️⃣ TRUST PROXY (for production behind nginx)
+app.set('trust proxy', 1);
+
+// 2️⃣ BODY PARSER (FIRST)
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 2️⃣ VIEWS & STATIC
+// 3️⃣ VIEWS & STATIC
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 3️⃣ SESSION (BEFORE ROUTES)
+// 4️⃣ SESSION (WITH MYSQL STORE - BEFORE ROUTES)
 app.use(session({
+  key: 'monitoring_session',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
-  resave: true,
-  saveUninitialized: true,
+  store: sessionStore,
+  resave: false, // ⭐ CHANGED from true
+  saveUninitialized: false, // ⭐ CHANGED from true
+  rolling: true, // ⭐ ADDED - refresh session on each request
   cookie: {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    path: '/'
   }
 }));
 
-// 4️⃣ CORS (LAST)
+// 5️⃣ SESSION DEBUG MIDDLEWARE (helpful for debugging)
+app.use((req, res, next) => {
+  if (req.path !== '/favicon.ico') {
+    console.log(`📍 ${req.method} ${req.path} - Session ID: ${req.sessionID?.substring(0, 8)}... - Authenticated: ${!!req.session.emr_perawat}`);
+  }
+  next();
+});
+
+// 6️⃣ CORS (LAST)
 const allowedOrigins = [
   'https://gateway.darsinurse.hint-lab.id',
   'https://darsinurse.hint-lab.id',
@@ -108,13 +131,19 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 /* ============================================================
-   AUTH MIDDLEWARE
+   AUTH MIDDLEWARE (IMPROVED)
    ============================================================ */
 const requireLogin = (req, res, next) => {
-  if (!req.session.emr_perawat) {
+  console.log('🔐 Auth check - EMR:', req.session.emr_perawat, 'Path:', req.path);
+  
+  if (!req.session || !req.session.emr_perawat) {
+    console.log('❌ No session, redirecting to login');
     return res.redirect('/login');
   }
+  
+  console.log('✅ Session valid:', req.session.nama_perawat);
   next();
 };
 
@@ -144,9 +173,8 @@ const requireAdminOrPerawat = (req, res, next) => {
 function getMetabaseEmbedUrl(dashboardId, params = {}) {
   const METABASE_URL = process.env.METABASE_URL || 'https://metabase.darsinurse.hint-lab.id';
   
-  // Mapping dashboard ke public UUID
   const publicDashboards = {
-    7: '18889b1d-d9fd-4ddd-8f32-0f56a0a8da6c', // Rawat Inap
+    7: '18889b1d-d9fd-4ddd-8f32-0f56a0a8da6c',
   };
   
   const uuid = publicDashboards[dashboardId];
@@ -154,10 +182,8 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
     throw new Error(`Dashboard ${dashboardId} tidak tersedia`);
   }
   
-  // Return public URL (fully interactive!)
   return `${METABASE_URL}/public/dashboard/${uuid}`;
 }
-
 
 /* ============================================================
    ROUTES - AUTH
@@ -166,12 +192,13 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
 // LOGIN PAGE
 app.get('/login', (req, res) => {
   if (req.session.emr_perawat) {
+    console.log('ℹ️ Already logged in, redirecting to dashboard');
     return res.redirect('/');
   }
   res.render('monitoring-login', { error: null });
 });
 
-// PROSES LOGIN
+// PROSES LOGIN (IMPROVED)
 app.post('/login', async (req, res) => {
   const { emr_perawat, password } = req.body;
   
@@ -204,25 +231,44 @@ app.post('/login', async (req, res) => {
     const user = rows[0];
     console.log('👤 User found:', user.emr_perawat, '- Role:', user.role);
 
-    if (user.password === hash) {
+    if (user.password !== hash) {
+      console.log('❌ Wrong password for:', emrInt);
+      return res.render('monitoring-login', { error: 'Password salah!' });
+    }
+
+    // ⭐ REGENERATE SESSION (security best practice)
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('❌ Session regenerate error:', err);
+        return res.render('monitoring-login', { error: 'Terjadi kesalahan sistem!' });
+      }
+
+      // Set session data
       req.session.emr_perawat = user.emr_perawat;
       req.session.nama_perawat = user.nama;
       req.session.role = user.role;
       
-      console.log('✓ Monitoring Login success:', user.nama);
+      console.log('✓ Session data set:', {
+        emr: user.emr_perawat,
+        nama: user.nama,
+        role: user.role
+      });
       
-      // ✅ SAVE SESSION BEFORE REDIRECT
-      req.session.save((err) => {
-        if (err) {
-          console.error('❌ Session save error:', err);
+      // ⭐ SAVE SESSION EXPLICITLY
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('❌ Session save error:', saveErr);
           return res.render('monitoring-login', { error: 'Terjadi kesalahan sistem!' });
         }
+        
+        console.log('✅ Session saved successfully, redirecting...');
+        console.log('   Session ID:', req.sessionID.substring(0, 8) + '...');
+        
+        // ⭐ REDIRECT SETELAH SESSION SAVED
         return res.redirect('/');
       });
-    } else {
-      console.log('❌ Wrong password for:', emrInt);
-      return res.render('monitoring-login', { error: 'Password salah!' });
-    }
+    });
+    
   } catch (err) {
     console.error('❌ Login error:', err);
     return res.render('monitoring-login', { error: 'Terjadi kesalahan sistem!' });
@@ -232,8 +278,13 @@ app.post('/login', async (req, res) => {
 // LOGOUT
 app.get('/logout', (req, res) => {
   console.log('👋 Logout:', req.session.nama_perawat);
-  req.session.destroy();
-  res.redirect('/login');
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('❌ Logout error:', err);
+    }
+    res.clearCookie('monitoring_session');
+    res.redirect('/login');
+  });
 });
 
 /* ============================================================
@@ -242,6 +293,8 @@ app.get('/logout', (req, res) => {
 
 // MAIN MONITORING PAGE
 app.get('/', requireLogin, (req, res) => {
+  console.log('📊 Rendering dashboard for:', req.session.nama_perawat);
+  
   res.render('monitoring-dashboard', {
     nama_perawat: req.session.nama_perawat,
     emr_perawat: req.session.emr_perawat,
@@ -263,14 +316,13 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
+    const whereClause = req.session.role === 'admin' 
+      ? '' 
+      : `AND emr_perawat = ${req.session.emr_perawat}`;
+    
     let query = `SELECT COUNT(*) as total FROM kunjungan 
-             WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`;
+             WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`;
     let params = [today, tomorrow];
-
-    if (req.session.role !== 'admin') {
-      query += ` AND emr_perawat = ?`;
-      params.push(req.session.emr_perawat);
-    }
 
     const [visits] = await conn.query(query, params);
     
@@ -397,7 +449,6 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
       [today, tomorrow]
     );
     
-    // Format data
     const formattedMeasurements = measurements.map(m => {
       let tipe_device = [];
       let data = [];
@@ -462,7 +513,7 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
 // API: Metabase Embed Token
 app.get('/api/metabase/rawat-inap-token', requireAdminOrPerawat, (req, res) => {
   try {
-    const DASHBOARD_ID = 7; // Dashboard ID untuk Rawat Inap
+    const DASHBOARD_ID = 7;
     const embedUrl = getMetabaseEmbedUrl(DASHBOARD_ID);
     
     console.log('✓ Metabase embed URL generated for dashboard:', DASHBOARD_ID);
@@ -507,12 +558,13 @@ const rawajalanSocket = io_client(RAWAT_JALAN_URL, {
   reconnection: true,
   reconnectionDelay: 2000,
   reconnectionDelayMax: 10000,
-  reconnectionAttempts: 10, // ← BATAS MAKSIMAL
-  timeout: 10000, // ← KURANGI
+  reconnectionAttempts: 10,
+  timeout: 10000,
   transports: ['websocket', 'polling'],
   autoConnect: true,
   forceNew: true
 });
+
 rawajalanSocket.on('connect', () => {
   console.log('✅ Connected to Rawat Jalan Server');
   io.emit('rawat-jalan-connected', {
@@ -532,7 +584,6 @@ rawajalanSocket.on('disconnect', (reason) => {
 rawajalanSocket.on('connect_error', (error) => {
   console.error('❌ Connection error to Rawat Jalan:', error.message);
   
-  // Broadcast ke clients
   io.emit('rawat-jalan-disconnected', {
     message: 'Fall detection system is offline',
     error: error.message,
@@ -548,9 +599,6 @@ rawajalanSocket.on('reconnect', (attemptNumber) => {
   });
 });
 
-
-// ⭐⭐⭐ FALL ALERT LISTENER ⭐⭐⭐
-// SATU listener saja
 rawajalanSocket.on('new-fall-alert', (alert) => {
   console.log('🚨 FALL ALERT RECEIVED');
   
@@ -559,7 +607,6 @@ rawajalanSocket.on('new-fall-alert', (alert) => {
     return;
   }
   
-  // Enkripsi/validate alert
   const validatedAlert = {
     id: alert.id || crypto.randomUUID(),
     nama_pasien: alert.nama_pasien,
@@ -571,13 +618,10 @@ rawajalanSocket.on('new-fall-alert', (alert) => {
     fall_confidence: alert.fall_confidence || 0.95
   };
   
-  // Satu emit saja
   io.to('monitoring-room').emit('fall-alert', validatedAlert);
   
   console.log(`✓ Alert sent to ${io.engine.clientsCount} connected clients`);
 });
-
-// JANGAN ada listener kedua untuk 'fall-alert'
 
 rawajalanSocket.on('fall-acknowledged', (data) => {
   console.log('✅ Fall acknowledged notification received:', data);
@@ -594,7 +638,6 @@ io.on('connection', (socket) => {
   
   socket.join('monitoring-room');
   
-  // Send Rawat Jalan connection status
   socket.emit('connection-status', {
     rawajalanConnected: rawajalanSocket.connected,
     rawajalanServer: RAWAT_JALAN_URL
@@ -609,11 +652,9 @@ io.on('connection', (socket) => {
     console.log('👀 Monitoring dashboard joined:', data);
   });
   
-  // Client acknowledges fall alert
   socket.on('acknowledge-fall', (data) => {
     console.log('✓ Client acknowledged fall:', data.alertId);
     
-    // Forward to Rawat Jalan server
     rawajalanSocket.emit('fall-acknowledged', {
       alertId: data.alertId,
       acknowledgedBy: data.acknowledgedBy || 'Unknown',
@@ -621,7 +662,6 @@ io.on('connection', (socket) => {
     });
   });
   
-  // Check Rawat Jalan connection status
   socket.on('check-connection', () => {
     socket.emit('connection-status', {
       rawajalanConnected: rawajalanSocket.connected,
@@ -631,20 +671,16 @@ io.on('connection', (socket) => {
 });
 
 /* ============================================================
-   END OF SOCKET.IO SETUP
-   ============================================================ */
-/* ============================================================
    AUTO-POLLING FALL DETECTION FROM DATABASE
    ============================================================ */
 
-let lastFallCheckTime = new Date(0); // Mulai dari epoch
-const FALL_CHECK_INTERVAL = 5000; // 5 detik
+let lastFallCheckTime = new Date(0);
+const FALL_CHECK_INTERVAL = 5000;
 
 async function checkFallDetectionFromDatabase() {
   try {
     const conn = await pool.getConnection();
     
-    // Query falls yang lebih baru dari last check
     const [falls] = await conn.query(`
       SELECT 
         v.id,
@@ -671,10 +707,8 @@ async function checkFallDetectionFromDatabase() {
     if (falls.length > 0) {
       console.log(`📊 [AUTO-POLL] Found ${falls.length} new fall(s) in database`);
       
-      // Update last check time
       lastFallCheckTime = new Date();
       
-      // Emit setiap fall ke clients
       falls.forEach(fall => {
         const alertData = {
           id: fall.id,
@@ -701,15 +735,14 @@ async function checkFallDetectionFromDatabase() {
   }
 }
 
-// START AUTO-POLLING
 let fallCheckInterval = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
 
 console.log(`✓ Fall detection auto-polling started (${FALL_CHECK_INTERVAL}ms interval)`);
 
-// CLEANUP ON SERVER SHUTDOWN
 process.on('SIGTERM', () => {
   clearInterval(fallCheckInterval);
 });
+
 // Fall Detection API Endpoints
 app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
   try {
@@ -772,9 +805,12 @@ server.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║   DARSINURSE MONITORING SERVER         ║
-║   Server: http://localhost:${PORT}        ║
+║   Server: http://localhost:${PORT}     ║
 ║   Socket.IO Fall Detection: ACTIVE     ║
-║   Environment: ${process.env.NODE_ENV || 'development'}              ║
+║   Session Store: MySQL (Persistent)    ║
+║Environment:                            ║
+║${process.env.NODE_ENV || 'development'}║ 
+║                                        ║
 ╚════════════════════════════════════════╝
 `);
 });
