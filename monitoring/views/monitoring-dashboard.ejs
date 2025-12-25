@@ -803,28 +803,46 @@
       setTimeout(() => socket.connect(), 3000);
     });
 
-    // FALL ALERT LISTENER - gunakan event 'fall-alert'
+        // FALL ALERT LISTENER - gunakan event 'fall-alert'
+    // ✅ PRIMARY LISTENER - Listen event 'fall-alert'
     socket.on('fall-alert', (alert) => {
-      console.log('🚨 FALL ALERT RECEIVED:', alert);
-      console.log('Alert data:', JSON.stringify(alert, null, 2));
+      console.log('🚨🚨🚨 FALL ALERT DITERIMA DI DASHBOARD!');
+      console.log('   Data:', JSON.stringify(alert, null, 2));
       
-      // Validasi alert object
+      // Validasi data
       if (!alert || !alert.nama_pasien) {
-        console.error('❌ Invalid alert data');
+        console.error('❌ DATA TIDAK VALID:', alert);
         return;
       }
       
+      // ✅ TAMPILKAN ALERT
       playAlertSound();
       showFallAlert(alert);
+      addLog(`🚨 FALL DETECTED: ${alert.nama_pasien} (EMR: ${alert.emr_no})`, 'error');
       
-      // Show browser notification if supported
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("🚨 FALL DETECTED!", {
-          body: `Pasien: ${alert.nama_pasien} - Room: ${alert.room_id}`,
-          icon: '/images/alert-icon.png',
-          requireInteraction: true
-        });
+      console.log('✓ Alert ditampilkan di dashboard');
+    });
+
+    // ✅ BACKUP LISTENER - untuk event variant
+    socket.on('new-fall-alert', (alert) => {
+      console.log('🚨 Fall alert (variant event)', alert);
+      
+      if (alert && alert.nama_pasien) {
+        playAlertSound();
+        showFallAlert(alert);
+        addLog(`🚨 FALL: ${alert.nama_pasien}`, 'error');
       }
+    });
+
+    // ✅ DEBUG: Log semua event yang diterima
+    socket.on('connect', () => {
+      console.log('✅ DASHBOARD TERHUBUNG KE SERVER - Socket ID:', socket.id);
+      addLog('Dashboard siap menerima notifikasi fall detection', 'success');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ DASHBOARD TERPUTUS DARI SERVER');
+      addLog('Dashboard terputus! Sedang reconnect...', 'error');
     });
     // ============================================
     // ALERT FUNCTIONS

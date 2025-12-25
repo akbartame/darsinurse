@@ -511,18 +511,30 @@ rawajalanSocket.on('reconnect', (attemptNumber) => {
 
 // ⭐⭐⭐ FALL ALERT LISTENER ⭐⭐⭐
 rawajalanSocket.on('new-fall-alert', (alert) => {
-  console.log('🚨 FALL ALERT RECEIVED from Rawat Jalan Server:');
+  console.log('🚨🚨🚨 FALL ALERT DITERIMA dari Rawat Jalan Server!');
   console.log('   Patient:', alert.nama_pasien);
-  console.log('   Room:', alert.room_id);
-  console.log('   Time:', alert.waktu);
-  console.log('   Full data:', JSON.stringify(alert, null, 2));
+  console.log('   EMR:', alert.emr_no);
+  console.log('   Data lengkap:', JSON.stringify(alert, null, 2));
   
-  // Broadcast to all monitoring dashboard clients
+  // Cek apakah data valid
+  if (!alert || !alert.nama_pasien) {
+    console.error('❌ DATA ALERT TIDAK VALID!');
+    return;
+  }
+  
+  // ✅ TERUSKAN KE SEMUA DASHBOARD
+  console.log('📤 Mengirim ke', io.engine.clientsCount, 'dashboard yang terbuka');
   io.emit('fall-alert', alert);
   
-  console.log('📤 Alert broadcasted to', io.engine.clientsCount, 'monitoring clients');
+  // ✅ BONUS: Kirim dengan 2 nama event untuk compatibility
+  io.emit('new-fall-alert', alert);
 });
 
+// ✅ TAMBAHAN: Listener backup untuk event 'fall-alert'
+rawajalanSocket.on('fall-alert', (alert) => {
+  console.log('🚨 Fall alert (variant)', alert);
+  io.emit('fall-alert', alert);
+});
 rawajalanSocket.on('fall-acknowledged', (data) => {
   console.log('✅ Fall acknowledged notification received:', data);
   io.emit('fall-acknowledged-broadcast', data);
