@@ -19,6 +19,7 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.MONITORING_PORT || 5000;
 
+
 /* ============================================================
    HASH FUNCTION
    ============================================================ */
@@ -61,7 +62,7 @@ pool.getConnection()
    EXPRESS & MIDDLEWARE SETUP
    ============================================================ */
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || ['http://localhost:4000', 'http://localhost:5000'],
+  origin: process.env.CORS_ORIGIN || ['https://gateway.darsinurse.hint-lab.id', 'https://darsinurse.hint-lab.id'],
   credentials: true
 }));
 
@@ -456,6 +457,99 @@ const io = socketIo(server, {
     methods: ["GET", "POST"]
   }
 });
+/* ============================================================
+   SOCKET.IO CLIENT - CONNECT TO RAWAT JALAN SERVER
+   ============================================================ */
+
+const RAWAT_JALAN_URL = process.env.RAWAT_JALAN_URL || 'http://localhost:4000';
+
+console.log(`🔄 Attempting to connect to Rawat Jalan Server: ${RAWAT_JALAN_URL}`);
+
+const rawajalanSocket = io_client(RAWAT_JALAN_URL, {
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 10,
+  timeout: 20000,
+  transports: ['websocket', 'polling']
+});
+
+rawajalanSocket.on('connect', () => {
+  console.log('✅ Connected to Rawat Jalan Server for Fall Detection');
+  console.log('   Socket ID:', rawajalanSocket.id);
+  
+  // Kirim join message
+  rawajalanSocket.emit('join-monitoring', {
+    server: 'monitoring-server',
+    timestamp: new Date().toISOString()
+  });
+});
+
+rawajalanSocket.on('connect_error', (error) => {
+  console.error('❌ Failed to connect to Rawat Jalan Server:', error.message);
+  console.log('   Retrying in 5 seconds...');
+});
+
+rawajalanSocket.on('disconnect', (reason) => {
+  console.warn('⚠️ Disconnected from Rawat Jalan Server');
+  console.log('   Reason:', reason);
+  if (reason === 'io server disconnect') {
+    // Server closed connection, reconnect manually
+    rawajalanSocket.connect();
+  }
+});
+
+rawajalanSocket.on('reconnect', (attemptNumber) => {
+  console.log('🔄 Reconnected to Rawat Jalan Server');
+  console.log('   Attempt:', attemptNumber);
+});
+
+// ⭐⭐⭐ HANDLER UTAMA - TERIMA FALL ALERT ⭐⭐⭐
+rawajalanSocket.on('new-fall-alert', (alert) => {
+  console.log('🚨 FALL ALERT RECEIVED from Rawat Jalan Server:');
+  console.log('   Patient:', alert.nama_pasien);
+  console.log('   Room:', alert.room_id);
+  console.log('   Time:', alert.waktu);
+  console.log('   Full data:', JSON.stringify(alert, null, 2));
+  
+  // Broadcast ke SEMUA monitoring dashboard clients
+  io.emit('fall-alert', alert);
+  
+  console.log('📤 Alert broadcasted to', io.engine.clientsCount, 'monitoring clients');
+});
+
+rawajalanSocket.on('fall-acknowledged', (data) => {
+  console.log('✅ Fall acknowledged notification received:', data);
+  
+  // Forward ke monitoring clients
+  io.emit('fall-acknowledged-broadcast', data);
+});
+
+/* ============================================================
+   END OF SOCKET.IO CLIENT SETUP
+   ============================================================ */
+
+// Socket.IO Server untuk monitoring clients
+io.on('connection', (socket) => {
+  console.log('🔌 Monitoring Client connected:', socket.id);
+  console.log('   Total clients:', io.engine.clientsCount);
+  
+  socket.join('monitoring-room');
+  
+  socket.on('disconnect', () => {
+    console.log('❌ Monitoring Client disconnected:', socket.id);
+  });
+  
+  socket.on('join-monitoring', (data) => {
+    console.log('👀 Monitoring dashboard joined:', data);
+  });
+  
+  // Jika client monitoring acknowledge alert
+  socket.on('acknowledge-fall', (data) => {
+    console.log('✓ Client acknowledged fall:', data);
+    // Forward ke Rawat Jalan server
+    rawajalanSocket.emit('fall-acknowledged', data);
+  });
+})
 
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
