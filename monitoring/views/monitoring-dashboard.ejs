@@ -293,6 +293,22 @@
       min-height: 850px; /* ← TAMBAHKAN INI! */
     }
 
+    .loading-progress-bar {
+      width: 200px;
+      height: 4px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .loading-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary-green), var(--secondary-teal));
+      width: 0%;
+      animation: progress 3s ease-in-out infinite;
+    }
+
     /* Loading Spinner - FIXED */
     .loading-spinner {
       position: absolute;
@@ -324,6 +340,11 @@
       0% { width: 0%; }
       50% { width: 70%; }
       100% { width: 100%; }
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
 
     .refresh-btn {
@@ -720,13 +741,13 @@
             <i class="fas fa-sync"></i> Refresh
           </button>
         </div>
-       <div id="metabase-loading" class="loading-spinner" style="display:flex;">
+        <div id="metabase-loading" class="loading-spinner" style="display:flex;">
           <i class="fas fa-spinner"></i>
           <span>Memuat dashboard Metabase...</span>
           
           <!-- Progress Bar -->
-          <div style="width: 200px; height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; margin-top: 10px;">
-            <div style="height: 100%; background: linear-gradient(90deg, #00B14F, #20c997); width: 0%; animation: progress 3s ease-in-out infinite;"></div>
+          <div class="loading-progress-bar">
+            <div class="loading-progress-fill"></div>
           </div>
           
           <small style="color: #999; font-size: 12px; margin-top: 10px;">
