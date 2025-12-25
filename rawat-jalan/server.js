@@ -784,457 +784,269 @@ app.get('/health', (req, res) => {
 });
 
 /* ============================================================
-   SOCKET.IO & FALL DETECTION MONITORING
+   SOCKET.IO & FALL DETECTION - FIXED CONFIGURATION
    ============================================================ */
 const server = http.createServer(app);
+
+// ✅ FIX: Improved CORS configuration
 const io = socketIo(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: [
+      "https://darsinurse.hint-lab.id",
+      "https://gateway.darsinurse.hint-lab.id",
+      "http://localhost:4000",
+      "http://localhost:5000"
+    ],
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowedHeaders: ["Content-Type"]
+  },
+  // ✅ FIX: Add transports and pingTimeout
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8,
+  // ✅ FIX: Allow HTTP polling for nginx reverse proxy
+  allowEIO3: true
 });
 
+console.log('✓ Socket.IO server initialized with CORS:', io.opts.cors);
+
+// ✅ FIX: Connect to monitoring server with better error handling
 const MONITORING_SERVER = process.env.MONITORING_URL || 'https://darsinurse.hint-lab.id';
+
+console.log(`🔄 Connecting to Monitoring Server: ${MONITORING_SERVER}`);
 
 const monitoringSocket = ioClient(MONITORING_SERVER, {
   reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionAttempts: 10,
-  reconnectionDelayMax: 5000
-});
-
-monitoringSocket.on('connect', () => {
-  console.log('✓ Connected to Monitoring Server at', MONITORING_SERVER);
-  // Join monitoring room setelah connect
-  monitoringSocket.emit('join-monitoring', {
-    server: 'rawat-jalan',
-    port: PORT
-  });
-});
-
-monitoringSocket.on('disconnect', () => {
-  console.warn('⚠ Disconnected from Monitoring Server');
-});
-
-monitoringSocket.on('connect_error', (error) => {
-  console.error('❌ Socket connection error:', error);
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 10000,
+  reconnectionAttempts: Infinity,
+  timeout: 30000,
+  transports: ['websocket', 'polling'], // ✅ Try websocket first, fallback to polling
+  autoConnect: true,
+  forceNew: false,
+  // ✅ Add path if needed
+  path: '/socket.io/'
 });
 
 let monitoringConnected = false;
 
 monitoringSocket.on('connect', () => {
-  console.log('✓ Connected to Monitoring Server at', MONITORING_SERVER);
+  console.log('✅ Connected to Monitoring Server');
+  console.log('   Socket ID:', monitoringSocket.id);
+  console.log('   Transport:', monitoringSocket.io.engine.transport.name);
   monitoringConnected = true;
   
   monitoringSocket.emit('join-monitoring', {
     server: 'rawat-jalan',
-    port: PORT
+    port: PORT,
+    timestamp: new Date().toISOString()
   });
 });
 
-monitoringSocket.on('disconnect', () => {
-  console.warn('⚠ Disconnected from Monitoring Server');
+monitoringSocket.on('connect_error', (error) => {
+  console.error('❌ Monitoring Server connection error:', error.message);
   monitoringConnected = false;
+  
+  // ✅ Log detailed error info
+  console.error('   Error type:', error.type);
+  console.error('   Error description:', error.description);
+  
+  // ✅ Will retry automatically due to reconnection settings
+  console.log('   ⏳ Will retry in', monitoringSocket.io.backoff.ms / 1000, 'seconds...');
 });
+
+monitoringSocket.on('disconnect', (reason) => {
+  console.warn('⚠️ Disconnected from Monitoring Server');
+  console.log('   Reason:', reason);
+  monitoringConnected = false;
+  
+  // ✅ Attempt manual reconnect if server initiated disconnect
+  if (reason === 'io server disconnect') {
+    console.log('   🔄 Attempting manual reconnect...');
+    setTimeout(() => {
+      monitoringSocket.connect();
+    }, 1000);
+  }
+});
+
+monitoringSocket.on('reconnect', (attemptNumber) => {
+  console.log('🔄 Reconnected to Monitoring Server');
+  console.log('   Attempts:', attemptNumber);
+  console.log('   Transport:', monitoringSocket.io.engine.transport.name);
+});
+
+monitoringSocket.on('reconnect_attempt', (attemptNumber) => {
+  console.log(`🔄 Reconnection attempt ${attemptNumber}...`);
+});
+
+monitoringSocket.on('reconnect_error', (error) => {
+  console.error('❌ Reconnection error:', error.message);
+});
+
+monitoringSocket.on('reconnect_failed', () => {
+  console.error('❌ All reconnection attempts failed');
+});
+
+// ✅ Fall alert listeners
+monitoringSocket.on('new-fall-alert', (alert) => {
+  console.log('🚨 FALL ALERT from Monitoring Server:');
+  console.log('   Patient:', alert.nama_pasien);
+  console.log('   Room:', alert.room_id);
+  console.log('   Data:', JSON.stringify(alert, null, 2));
+  
+  // Broadcast to all clients
+  io.emit('fall-alert', alert);
+  console.log('📤 Alert broadcasted to', io.engine.clientsCount, 'clients');
+});
+
+monitoringSocket.on('fall-acknowledged', (data) => {
+  console.log('✅ Fall acknowledged:', data);
+  io.emit('fall-acknowledged-broadcast', data);
+});
+
 /* ============================================================
-   DARSINURSE - ROOM MANAGEMENT API ENDPOINTS
-   Tambahkan kode ini ke server.js Anda
-   Letakkan SEBELUM "server.listen(PORT, ...)"
+   SOCKET.IO SERVER - CLIENT CONNECTIONS
    ============================================================ */
-
-// ============================================================
-// ROOM MANAGEMENT API ENDPOINTS
-// ============================================================
-
-// GET ALL ROOMS
-app.get('/api/rooms', requireLogin, async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
-    
-    const [rooms] = await conn.query(`
-      SELECT 
-        rd.room_id,
-        rd.device_id,
-        rd.emr_no,
-        rd.assigned_at,
-        p.nama as nama_pasien,
-        p.poli,
-        p.jenis_kelamin
-      FROM room_device rd
-      LEFT JOIN pasien p ON rd.emr_no = p.emr_no
-      ORDER BY rd.room_id ASC
-    `);
-    
-    conn.release();
-    
-    res.json({ success: true, rooms });
-  } catch (err) {
-    console.error('❌ Get rooms error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// ADD NEW ROOM
-app.post('/api/rooms/add', requireLogin, async (req, res) => {
-  const { room_id, device_id, emr_no } = req.body;
+io.on('connection', (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+  console.log('   Transport:', socket.conn.transport.name);
+  console.log('   Total clients:', io.engine.clientsCount);
   
-  if (!room_id || !device_id) {
-    return res.status(400).json({ error: 'Room ID dan Device ID harus diisi' });
-  }
+  // ✅ Send connection status to client
+  socket.emit('connection-status', {
+    connected: true,
+    monitoringServerConnected: monitoringConnected,
+    monitoringServer: MONITORING_SERVER
+  });
   
-  try {
-    const conn = await pool.getConnection();
+  // ✅ Handle fall detection from devices
+  socket.on('fall-detected', async (data) => {
+    console.log('🚨 FALL DETECTED event from device:', data);
     
-    // Check if room_id or device_id already exists
-    const [existing] = await conn.query(
-      'SELECT room_id, device_id FROM room_device WHERE room_id = ? OR device_id = ?',
-      [room_id, device_id]
-    );
-    
-    if (existing.length > 0) {
-      conn.release();
-      return res.status(400).json({ 
-        error: 'Room ID atau Device ID sudah terdaftar' 
-      });
-    }
-    
-    // If emr_no provided, validate patient exists
-    if (emr_no) {
-      const emrInt = parseInt(emr_no);
+    try {
+      const conn = await pool.getConnection();
+      
+      // Insert to database
+      const vitalsData = {
+        emr_no: data.emr_no,
+        id_kunjungan: data.id_kunjungan,
+        waktu: new Date(),
+        fall_detected: 1,
+        heart_rate: data.heart_rate,
+        sistolik: data.sistolik,
+        diastolik: data.diastolik,
+        respirasi: data.respirasi,
+        jarak_kasur_cm: data.jarak_kasur_cm,
+        emr_perawat: data.emr_perawat
+      };
+      
+      const [result] = await conn.query('INSERT INTO vitals SET ?', vitalsData);
+      
+      // Get patient info
       const [patient] = await conn.query(
-        'SELECT emr_no FROM pasien WHERE emr_no = ?',
-        [emrInt]
+        'SELECT p.nama, p.poli, rd.room_id, rd.device_id FROM pasien p LEFT JOIN room_device rd ON p.emr_no = rd.emr_no WHERE p.emr_no = ?',
+        [data.emr_no]
       );
       
-      if (patient.length === 0) {
-        conn.release();
-        return res.status(400).json({ error: 'Pasien tidak ditemukan' });
+      conn.release();
+      
+      const patientInfo = patient[0] || {};
+      
+      // Create alert data
+      const alertData = {
+        id: result.insertId,
+        emr_no: data.emr_no,
+        nama_pasien: patientInfo.nama || 'Unknown',
+        room_id: patientInfo.room_id || 'Unknown',
+        device_id: patientInfo.device_id,
+        poli: patientInfo.poli,
+        waktu: vitalsData.waktu,
+        heart_rate: data.heart_rate,
+        sistolik: data.sistolik,
+        diastolik: data.diastolik,
+        blood_pressure: data.sistolik && data.diastolik ? `${data.sistolik}/${data.diastolik}` : null,
+        respirasi: data.respirasi,
+        jarak_kasur_cm: data.jarak_kasur_cm,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log('📤 Broadcasting fall alert:', alertData);
+      
+      // Broadcast to all local clients
+      io.emit('fall-alert', alertData);
+      
+      // Send to monitoring server if connected
+      if (monitoringConnected) {
+        monitoringSocket.emit('new-fall-alert', alertData);
+        console.log('📤 Alert sent to monitoring server');
+      } else {
+        console.warn('⚠️ Monitoring server not connected, alert not forwarded');
       }
       
-      // Check if patient already assigned to another room
-      const [assignedRoom] = await conn.query(
-        'SELECT room_id FROM room_device WHERE emr_no = ?',
-        [emrInt]
-      );
-      
-      if (assignedRoom.length > 0) {
-        conn.release();
-        return res.status(400).json({ 
-          error: `Pasien sudah berada di ruangan ${assignedRoom[0].room_id}` 
-        });
-      }
+    } catch (err) {
+      console.error('❌ Error processing fall detection:', err);
     }
-    
-    // Insert new room
-    await conn.query(
-      'INSERT INTO room_device (room_id, device_id, emr_no, assigned_at) VALUES (?, ?, ?, NOW())',
-      [room_id, device_id, emr_no || null]
-    );
-    
-    conn.release();
-    
-    console.log('✓ New room added:', room_id);
-    res.json({ 
-      success: true, 
-      message: `Ruangan ${room_id} berhasil ditambahkan` 
-    });
-  } catch (err) {
-    console.error('❌ Add room error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// ASSIGN PATIENT TO ROOM (Masukkan Pasien)
-app.post('/api/rooms/assign', requireLogin, async (req, res) => {
-  const { room_id, emr_no } = req.body;
+  });
   
-  if (!room_id || !emr_no) {
-    return res.status(400).json({ error: 'Room ID dan EMR Pasien harus diisi' });
-  }
+  // ✅ Handle acknowledgment
+  socket.on('fall-acknowledged', (data) => {
+    console.log('✅ Fall acknowledged by client:', data);
+    io.emit('fall-acknowledged-broadcast', data);
+    
+    if (monitoringConnected) {
+      monitoringSocket.emit('fall-acknowledged', data);
+    }
+  });
   
-  const emrInt = parseInt(emr_no);
-  if (isNaN(emrInt)) {
-    return res.status(400).json({ error: 'EMR Pasien tidak valid' });
-  }
+  // ✅ Handle join monitoring room
+  socket.on('join-monitoring', (data) => {
+    console.log('👀 Client joined monitoring:', data);
+  });
   
-  try {
-    const conn = await pool.getConnection();
-    
-    // Check if room exists
-    const [room] = await conn.query(
-      'SELECT room_id, emr_no FROM room_device WHERE room_id = ?',
-      [room_id]
-    );
-    
-    if (room.length === 0) {
-      conn.release();
-      return res.status(404).json({ error: 'Ruangan tidak ditemukan' });
-    }
-    
-    if (room[0].emr_no) {
-      conn.release();
-      return res.status(400).json({ error: 'Ruangan sudah terisi' });
-    }
-    
-    // Check if patient exists
-    const [patient] = await conn.query(
-      'SELECT emr_no, nama FROM pasien WHERE emr_no = ?',
-      [emrInt]
-    );
-    
-    if (patient.length === 0) {
-      conn.release();
-      return res.status(404).json({ error: 'Pasien tidak ditemukan' });
-    }
-    
-    // Check if patient already in another room
-    const [assignedRoom] = await conn.query(
-      'SELECT room_id FROM room_device WHERE emr_no = ?',
-      [emrInt]
-    );
-    
-    if (assignedRoom.length > 0) {
-      conn.release();
-      return res.status(400).json({ 
-        error: `Pasien sudah berada di ruangan ${assignedRoom[0].room_id}` 
-      });
-    }
-    
-    // Assign patient to room
-    await conn.query(
-      'UPDATE room_device SET emr_no = ?, assigned_at = NOW() WHERE room_id = ?',
-      [emrInt, room_id]
-    );
-    
-    conn.release();
-    
-    console.log(`✓ Patient ${emrInt} assigned to room ${room_id}`);
-    res.json({ 
-      success: true, 
-      message: `Pasien ${patient[0].nama} berhasil dimasukkan ke ruangan ${room_id}` 
-    });
-  } catch (err) {
-    console.error('❌ Assign patient error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// REMOVE PATIENT FROM ROOM (Keluarkan Pasien)
-app.post('/api/rooms/remove-patient', requireLogin, async (req, res) => {
-  const { room_id } = req.body;
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id);
+    console.log('   Remaining clients:', io.engine.clientsCount);
+  });
   
-  if (!room_id) {
-    return res.status(400).json({ error: 'Room ID harus diisi' });
-  }
-  
-  try {
-    const conn = await pool.getConnection();
-    
-    // Check if room exists and has patient
-    const [room] = await conn.query(
-      'SELECT room_id, emr_no FROM room_device WHERE room_id = ?',
-      [room_id]
-    );
-    
-    if (room.length === 0) {
-      conn.release();
-      return res.status(404).json({ error: 'Ruangan tidak ditemukan' });
-    }
-    
-    if (!room[0].emr_no) {
-      conn.release();
-      return res.status(400).json({ error: 'Ruangan sudah kosong' });
-    }
-    
-    // Remove patient from room
-    await conn.query(
-      'UPDATE room_device SET emr_no = NULL, assigned_at = NOW() WHERE room_id = ?',
-      [room_id]
-    );
-    
-    conn.release();
-    
-    console.log(`✓ Patient removed from room ${room_id}`);
-    res.json({ 
-      success: true, 
-      message: `Pasien berhasil dikeluarkan dari ruangan ${room_id}` 
-    });
-  } catch (err) {
-    console.error('❌ Remove patient error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// UPDATE ROOM (Edit Room Info)
-app.put('/api/rooms/:room_id', requireLogin, async (req, res) => {
-  const { room_id } = req.params;
-  const { new_room_id, device_id } = req.body;
-  
-  if (!new_room_id || !device_id) {
-    return res.status(400).json({ error: 'Room ID dan Device ID harus diisi' });
-  }
-  
-  try {
-    const conn = await pool.getConnection();
-    
-    // Check if room exists
-    const [room] = await conn.query(
-      'SELECT room_id FROM room_device WHERE room_id = ?',
-      [room_id]
-    );
-    
-    if (room.length === 0) {
-      conn.release();
-      return res.status(404).json({ error: 'Ruangan tidak ditemukan' });
-    }
-    
-    // If changing room_id, check if new room_id already exists
-    if (new_room_id !== room_id) {
-      const [existing] = await conn.query(
-        'SELECT room_id FROM room_device WHERE room_id = ?',
-        [new_room_id]
-      );
-      
-      if (existing.length > 0) {
-        conn.release();
-        return res.status(400).json({ error: 'Room ID baru sudah terdaftar' });
-      }
-    }
-    
-    // Check if device_id already used by another room
-    const [existingDevice] = await conn.query(
-      'SELECT room_id FROM room_device WHERE device_id = ? AND room_id != ?',
-      [device_id, room_id]
-    );
-    
-    if (existingDevice.length > 0) {
-      conn.release();
-      return res.status(400).json({ error: 'Device ID sudah digunakan ruangan lain' });
-    }
-    
-    // Update room
-    await conn.query(
-      'UPDATE room_device SET room_id = ?, device_id = ? WHERE room_id = ?',
-      [new_room_id, device_id, room_id]
-    );
-    
-    conn.release();
-    
-    console.log(`✓ Room updated: ${room_id} -> ${new_room_id}`);
-    res.json({ 
-      success: true, 
-      message: 'Ruangan berhasil diupdate' 
-    });
-  } catch (err) {
-    console.error('❌ Update room error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// DELETE ROOM
-app.delete('/api/rooms/delete', requireLogin, async (req, res) => {
-  const { room_id } = req.body;
-  
-  if (!room_id) {
-    return res.status(400).json({ error: 'Room ID harus diisi' });
-  }
-  
-  try {
-    const conn = await pool.getConnection();
-    
-    // Check if room exists
-    const [room] = await conn.query(
-      'SELECT room_id, emr_no FROM room_device WHERE room_id = ?',
-      [room_id]
-    );
-    
-    if (room.length === 0) {
-      conn.release();
-      return res.status(404).json({ error: 'Ruangan tidak ditemukan' });
-    }
-    
-    // Check if room has patient
-    if (room[0].emr_no) {
-      conn.release();
-      return res.status(400).json({ 
-        error: 'Tidak bisa menghapus ruangan yang masih terisi. Keluarkan pasien terlebih dahulu.' 
-      });
-    }
-    
-    // Delete room
-    await conn.query('DELETE FROM room_device WHERE room_id = ?', [room_id]);
-    
-    conn.release();
-    
-    console.log(`✓ Room deleted: ${room_id}`);
-    res.json({ 
-      success: true, 
-      message: `Ruangan ${room_id} berhasil dihapus` 
-    });
-  } catch (err) {
-    console.error('❌ Delete room error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// GET AVAILABLE PATIENTS (yang belum ada di ruangan)
-app.get('/api/rooms/available-patients', requireLogin, async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
-    
-    const [patients] = await conn.query(`
-      SELECT 
-        p.emr_no,
-        p.nama,
-        p.poli,
-        p.jenis_kelamin
-      FROM pasien p
-      WHERE p.emr_no NOT IN (
-        SELECT emr_no FROM room_device WHERE emr_no IS NOT NULL
-      )
-      ORDER BY p.nama ASC
-    `);
-    
-    conn.release();
-    
-    res.json({ success: true, patients });
-  } catch (err) {
-    console.error('❌ Get available patients error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
-  }
-});
-
-// ROUTE: Room Management Page
-app.get('/rooms', requireLogin, (req, res) => {
-  res.render('room-management', {
-    nama_perawat: req.session.nama_perawat,
-    emr_perawat: req.session.emr_perawat,
-    role: req.session.role
+  socket.on('error', (error) => {
+    console.error('❌ Socket error:', error);
   });
 });
-
-console.log('✓ Room Management API endpoints loaded');
-console.log('  - GET    /api/rooms');
-console.log('  - POST   /api/rooms/add');
-console.log('  - POST   /api/rooms/assign');
-console.log('  - POST   /api/rooms/remove-patient');
-console.log('  - PUT    /api/rooms/:room_id');
-console.log('  - DELETE /api/rooms/delete');
-console.log('  - GET    /api/rooms/available-patients');
-console.log('  - GET    /rooms (UI page)');
-
 
 /* ============================================================
    START SERVER
    ============================================================ */
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║   DARSINURSE GATEWAY - RAWAT JALAN     ║
-║   Server: http://localhost:${PORT}        ║
-║   Socket.IO Fall Detection: ACTIVE     ║
+║   Server: http://0.0.0.0:${PORT}          ║
+║   Socket.IO: ACTIVE                    ║
+║   Monitoring: ${MONITORING_SERVER}
 ╚════════════════════════════════════════╝
 `);
+  
+  // ✅ Log initial status
+  setTimeout(() => {
+    console.log('📊 Status Check:');
+    console.log('   - HTTP Server: ✓ Running');
+    console.log('   - Socket.IO Server: ✓ Active');
+    console.log(`   - Monitoring Connection: ${monitoringConnected ? '✓ Connected' : '⏳ Connecting...'}`);
+    console.log(`   - Connected Clients: ${io.engine.clientsCount}`);
+  }, 2000);
+});
+
+// ✅ Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('📴 SIGTERM received, closing server...');
+  server.close(() => {
+    console.log('✓ Server closed');
+    pool.end();
+    process.exit(0);
+  });
 });
 
 app.delete('/admin/api/users/:emr', requireAdmin, async (req, res) => {

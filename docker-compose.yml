@@ -45,7 +45,7 @@ services:
       TZ: Asia/Jakarta
       NODE_ENV: production
       PORT: 4000
-      MONITORING_URL: "https://darsinurse.hint-lab.id"
+      MONITORING_URL: "http://darsinurse-monitoring:5000"  # ✅ Use internal Docker network
     depends_on:
       darsinurse-db:
         condition: service_healthy
@@ -56,7 +56,6 @@ services:
     networks:
       - darsinurse_network
     healthcheck:
-      # ✅ FIXED: Pakai localhost internal, bukan external HTTPS
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
       interval: 30s
       timeout: 10s
@@ -82,10 +81,10 @@ services:
       NODE_ENV: production
       MONITORING_PORT: 5000
       
-      # ✅ CRITICAL: Internal Docker network connection
+      # ✅ CRITICAL: Internal Docker network for server-to-server
       RAWAT_JALAN_URL: http://darsinurse-app:4000
 
-      # ✅ FIXED: CORS hanya untuk browser (external URLs)
+      # ✅ CORS for browser (external URLs)
       CORS_ORIGIN: "https://darsinurse.hint-lab.id,https://gateway.darsinurse.hint-lab.id"
       
       # Metabase Configuration
@@ -164,40 +163,24 @@ networks:
 volumes:
   darsinurse_mysql_data:
   metabase_data:
-  
+
 # ============================================================
-# CARA MENGGUNAKAN:
+# DEPLOYMENT STEPS:
 # ============================================================
-# 1. Pastikan struktur folder sudah benar:
-#    project/
-#    ├── docker-compose.yml (file ini)
-#    ├── rawat-jalan/
-#    │   ├── Dockerfile
-#    │   ├── server.js
-#    │   └── package.json
-#    └── monitoring/
-#        ├── Dockerfile
-#        ├── monitoring-server.js
-#        └── package.json
-#
-# 2. Build dan jalankan semua services:
-#    docker-compose up -d
-#
-# 3. Cek status:
-#    docker-compose ps
-#
-# 4. Lihat logs:
-#    docker-compose logs -f
-#
-# 5. Akses aplikasi:
-#    - Rawat Jalan: http://localhost:4000
-#    - Monitoring: http://localhost:5000
-#    - phpMyAdmin: http://localhost:8080
-#    - Metabase: http://localhost:3000
-#
-# 6. Stop services:
+# 1. Stop existing containers:
 #    docker-compose down
 #
-# 7. Stop dan hapus volumes:
-#    docker-compose down -v
+# 2. Rebuild images:
+#    docker-compose build --no-cache
+#
+# 3. Start services:
+#    docker-compose up -d
+#
+# 4. Check logs:
+#    docker-compose logs -f darsinurse-app
+#    docker-compose logs -f darsinurse-monitoring
+#
+# 5. Test Socket.IO:
+#    docker logs darsinurse-app --tail=100
+#    docker logs darsinurse-monitoring --tail=100
 # ============================================================
