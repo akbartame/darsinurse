@@ -283,50 +283,29 @@
       color: var(--primary-blue);
     }
 
-    /* Metabase Container */
+    /* Metabase Container - FIXED */
     .metabase-container {
       background: white;
       border-radius: 12px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-      overflow: visible;
+      overflow: hidden;
       position: relative;
+      min-height: 850px; /* ← TAMBAHKAN INI! */
     }
 
-    .metabase-header {
-      background: linear-gradient(135deg, var(--primary-blue), var(--primary-dark));
-      color: white;
-      padding: 16px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .metabase-header h3 {
-      font-size: 16px;
-      font-weight: 600;
-      margin: 0;
-    }
-
-    .metabase-header h3 i {
-      font-size: 18px;
-      margin-right: 8px;
-    }
-    .metabase-iframe {
-      width: 100%;
-      border: none;
-      min-height: 800px;
-      pointer-events: auto !important; /* ← TAMBAHKAN INI */
-      position: relative;
-      z-index: 1;
-    }
-
+    /* Loading Spinner - FIXED */
     .loading-spinner {
       position: absolute;
+      top: 60px; /* ← Mulai setelah header, bukan dari top: 0 */
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10;
+      background: white;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 400px;
       gap: 15px;
       color: var(--primary-green);
     }
@@ -336,9 +315,15 @@
       animation: spin 2s linear infinite;
     }
 
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+    .loading-spinner span {
+      font-size: 16px;
+      font-weight: 600;
+      color: #666;
+    }
+    @keyframes progress {
+      0% { width: 0%; }
+      50% { width: 70%; }
+      100% { width: 100%; }
     }
 
     .refresh-btn {
@@ -735,9 +720,18 @@
             <i class="fas fa-sync"></i> Refresh
           </button>
         </div>
-        <div id="metabase-loading" class="loading-spinner" style="display:flex;">
+       <div id="metabase-loading" class="loading-spinner" style="display:flex;">
           <i class="fas fa-spinner"></i>
           <span>Memuat dashboard Metabase...</span>
+          
+          <!-- Progress Bar -->
+          <div style="width: 200px; height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; margin-top: 10px;">
+            <div style="height: 100%; background: linear-gradient(90deg, #00B14F, #20c997); width: 0%; animation: progress 3s ease-in-out infinite;"></div>
+          </div>
+          
+          <small style="color: #999; font-size: 12px; margin-top: 10px;">
+            Harap tunggu beberapa saat
+          </small>
         </div>
         <iframe 
           id="metabase-iframe" 

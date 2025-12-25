@@ -117,17 +117,21 @@ const requireAdminOrPerawat = (req, res, next) => {
    ============================================================ */
 function getMetabaseEmbedUrl(dashboardId, params = {}) {
   const METABASE_URL = process.env.METABASE_URL || 'https://metabase.darsinurse.hint-lab.id';
-  const METABASE_SECRET = process.env.METABASE_SECRET || 'a7dd79ccd6a69475c06533ca4d9ac152c443ed3c7550ec7be12ba06dd1b7ce55';
   
-  const payload = {
-    resource: { dashboard: dashboardId },
-    params: params,
-    exp: Math.round(Date.now() / 1000) + (10 * 60) // 10 minute expiration
+  // Mapping dashboard ke public UUID
+  const publicDashboards = {
+    7: '18889b1d-d9fd-4ddd-8f32-0f56a0a8da6c', // Rawat Inap
   };
   
-  const token = jwt.sign(payload, METABASE_SECRET);
-  return `${METABASE_URL}/embed/dashboard/${token}`;
+  const uuid = publicDashboards[dashboardId];
+  if (!uuid) {
+    throw new Error(`Dashboard ${dashboardId} tidak tersedia`);
+  }
+  
+  // Return public URL (fully interactive!)
+  return `${METABASE_URL}/public/dashboard/${uuid}`;
 }
+
 
 /* ============================================================
    ROUTES - AUTH
