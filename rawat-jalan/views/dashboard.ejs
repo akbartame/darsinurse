@@ -696,7 +696,7 @@
 
   <!-- Fall Alert Container -->
   <div class="fall-alert-container" id="fall-alert-container"></div>
-
+sendToServer
   <!-- Header -->
   <header class="top-header">
     <div class="container-fluid">
@@ -1834,7 +1834,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id_kunjungan: parseInt(idKunjungan),
-            emr_pasien: parseInt(emrPasien),
+            emr_no: parseInt(emrPasien),
             tipe_device: tipe,
             data: dataValue
           })
