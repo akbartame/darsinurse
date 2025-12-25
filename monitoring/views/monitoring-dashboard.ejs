@@ -795,662 +795,681 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   
   <script>
-    // ============================================
-    // SOCKET.IO CLIENT - FALL DETECTION
-    // ============================================
+// ============================================
+// COMPLETE FIXED DASHBOARD SCRIPT
+// ============================================
 
-    // Initialize Socket.IO connection
-  // Initialize Socket.IO connection
-    const socket = io({
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+// ============================================
+// GLOBAL STATE
+// ============================================
+let audioUnlocked = false;
+let currentAlertAudio = null;
+const displayedAlerts = new Set();
+let fallCheckInterval = null;
+
+// ============================================
+// SOCKET.IO CLIENT - FALL DETECTION
+// ============================================
+const socket = io({
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 5
+});
+
+// Connection handlers
+socket.on('connect', () => {
+  console.log('✓ Socket.IO connected:', socket.id);
+  socket.emit('join-monitoring', { 
+    perawat: '<%= nama_perawat %>',
+    timestamp: new Date().toISOString() 
+  });
+});
+
+socket.on('disconnect', () => {
+  console.warn('⚠️ Socket.IO disconnected');
+});
+
+socket.on('connect_error', (error) => {
+  console.error('❌ Socket connection error:', error);
+  setTimeout(() => socket.connect(), 3000);
+});
+
+// ============================================
+// PRIMARY LISTENER - Fall Alert
+// ============================================
+socket.on('fall-alert', (alert) => {
+  console.log('🚨 FALL ALERT RECEIVED:', JSON.stringify(alert, null, 2));
+  
+  if (!alert || !alert.nama_pasien) {
+    console.error('❌ Invalid alert data:', alert);
+    return;
+  }
+  
+  if (displayedAlerts.has(alert.id.toString())) {
+    console.log('ℹ️ Alert already displayed:', alert.id);
+    return;
+  }
+  
+  displayedAlerts.add(alert.id.toString());
+  playAlertSound();
+  showFallAlert(alert);
+  
+  if (Notification.permission === 'granted') {
+    const notification = new Notification('🚨 FALL ALERT!', {
+      body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="80" fill="red">⚠️</text></svg>',
+      tag: `fall-${alert.id}`,
+      requireInteraction: true,
+      vibrate: [200, 100, 200]
     });
+    
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+  }
+  
+  if ('setAppBadge' in navigator) {
+    navigator.setAppBadge(displayedAlerts.size);
+  }
+  
+  console.log('✓ Alert displayed successfully');
+});
 
-    // Connection handlers
-    socket.on('connect', () => {
-      console.log('✓ Socket.IO connected:', socket.id);
-      socket.emit('join-monitoring', { 
-        perawat: '<%= nama_perawat %>',
-        timestamp: new Date().toISOString() 
-      });
-    });
-
-    socket.on('disconnect', () => {
-      console.warn('⚠️ Socket.IO disconnected');
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
-      setTimeout(() => socket.connect(), 3000);
-    });
-    function addLog(message, type = 'info') {
-      // Function kosong (untuk monitoring dashboard, tidak ada activity log)
-      // Jadi cukup console.log saja
-      console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-
-    function showStatus(type, message, alertType = 'info') {
-      // Tidak ada status div di monitoring dashboard
-      // Jadi cukup log saja
-      console.log(`[STATUS] ${message}`);
-    }
-    const displayedAlerts = new Set();
-    let fallDetectionInterval = null;
-
-    console.log('✓ Auto-fetch fall detection initialized');
-    // ✅ PRIMARY LISTENER - Listen event 'fall-alert'
-    socket.on('fall-alert', (alert) => {
-      console.log('🚨🚨🚨 FALL ALERT DITERIMA DI DASHBOARD!');
-      console.log('   Data:', JSON.stringify(alert, null, 2));
+// ============================================
+// AUTO-POLLING FROM DATABASE
+// ============================================
+function startFallDetectionPolling() {
+  if (fallCheckInterval) {
+    clearInterval(fallCheckInterval);
+  }
+  
+  fallCheckInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/fall-detection/latest');
+      const data = await res.json();
       
-      // Validasi data
-      if (!alert || !alert.nama_pasien) {
-        console.error('❌ DATA TIDAK VALID:', alert);
-        return;
-      }
-      
-      // 1️⃣ SUARA
-      playAlertSound();
-      displayedAlerts.add(`${alert.id}`); // Mark sebagai seen
-      setInterval(async () => {
-        const res = await fetch('/api/fall-detection/latest');
-        const data = await res.json();
-        
+      if (data.success && data.falls) {
         data.falls.forEach(fall => {
-          if (!displayedAlerts.has(fall.id)) {
-            // Belum ditampilkan, tampilkan sekarang
-            showFallAlert(fall);
-            displayedAlerts.add(fall.id);
+          const fallId = fall.id.toString();
+          
+          if (!displayedAlerts.has(fallId)) {
+            console.log('📊 [POLL] New fall detected:', fall.nama_pasien);
+            
+            const alertData = {
+              id: fall.id,
+              emr_no: fall.emr_no,
+              nama_pasien: fall.nama_pasien,
+              room_id: fall.room_id || `Room-${fall.emr_no}`,
+              heart_rate: fall.heart_rate,
+              blood_pressure: fall.sistolik && fall.diastolik 
+                ? `${fall.sistolik}/${fall.diastolik}` 
+                : 'N/A',
+              waktu: fall.waktu
+            };
+            
+            displayedAlerts.add(fallId);
+            playAlertSound();
+            showFallAlert(alertData);
+            
+            if (Notification.permission === 'granted') {
+              new Notification('🚨 FALL DETECTED', {
+                body: `${alertData.nama_pasien} - ${alertData.room_id}`,
+                tag: `fall-${alertData.id}`,
+                requireInteraction: true
+              });
+            }
           }
         });
-      }, 10000); // Check every 10 seconds
-      // 2️⃣ VISUAL POPUP
-      showFallAlert(alert);
-      
-      // 3️⃣ DESKTOP NOTIFICATION
-        if (Notification.permission === 'granted') {
-          const notification = new Notification('🚨 FALL ALERT!', {
-            body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
-            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="80" fill="red">⚠️</text></svg>',
-            tag: `fall-${alert.id}`,
-            requireInteraction: true,
-            vibrate: [200, 100, 200],
-            badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="red"/></svg>'
-          });
-          
-          notification.onclick = () => {
-            window.focus();
-            notification.close();
-          };
-        }
-      })
+      }
+    } catch (err) {
+      console.error('⚠️ [POLL] Error:', err.message);
+    }
+  }, 10000);
+  
+  console.log('✓ Fall detection polling started');
+}
 
+// ============================================
+// SHOW FALL ALERT
+// ============================================
+function showFallAlert(alert) {
+  const container = document.getElementById('fall-alert-container');
+  if (!container) {
+    console.error('❌ Alert container not found');
+    return;
+  }
+  
+  const alertDiv = document.createElement('div');
+  alertDiv.className = 'fall-alert';
+  alertDiv.id = `fall-alert-${alert.id}`;
+  
+  const waktu = new Date(alert.waktu);
+  const waktuStr = waktu.toLocaleTimeString('id-ID', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  
+  alertDiv.innerHTML = `
+    <div class="fall-alert-header">
+      <div class="fall-alert-icon">⚠️</div>
+      <h3 class="fall-alert-title">FALL DETECTED!</h3>
+    </div>
     
-    // 4️⃣ BADGE API (Update unread count)
-    if ('setAppBadge' in navigator) {
-      navigator.setAppBadge(1);
+    <div class="fall-alert-body">
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">👤 Pasien:</span>
+        <span class="fall-alert-value">${alert.nama_pasien}</span>
+      </div>
+      
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">🏥 Ruangan:</span>
+        <span class="fall-alert-value">${alert.room_id}</span>
+      </div>
+      
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">📋 EMR:</span>
+        <span class="fall-alert-value">${alert.emr_no}</span>
+      </div>
+      
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">💓 Heart Rate:</span>
+        <span class="fall-alert-value">${alert.heart_rate || 'N/A'} bpm</span>
+      </div>
+      
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">🩺 Blood Pressure:</span>
+        <span class="fall-alert-value">${alert.blood_pressure || 'N/A'} mmHg</span>
+      </div>
+      
+      <div class="fall-alert-info">
+        <span class="fall-alert-label">🕐 Waktu:</span>
+        <span class="fall-alert-value">${waktuStr}</span>
+      </div>
+    </div>
+    
+    <div class="fall-alert-footer">
+      <button class="fall-alert-btn btn-acknowledge" onclick="acknowledgeFallAlert(${alert.id})">
+        ✓ Acknowledge
+      </button>
+      <button class="fall-alert-btn btn-close" onclick="closeFallAlert(${alert.id})">
+        ✕ Close
+      </button>
+    </div>
+    
+    <div class="fall-alert-timestamp">
+      Alert received at ${new Date().toLocaleTimeString('id-ID')}
+    </div>
+  `;
+  
+  container.insertBefore(alertDiv, container.firstChild);
+  
+  setTimeout(() => {
+    const element = document.getElementById(`fall-alert-${alert.id}`);
+    if (element && element.parentNode) {
+      console.log('⏱️ Auto-closing alert:', alert.id);
+      closeFallAlert(alert.id);
     }
-      
-      // 5️⃣ LOG
-    addLog(`🚨 FALL DETECTED: ${alert.nama_pasien} (EMR: ${alert.emr_no})`, 'error');
-      
-    console.log('✓ Alert ditampilkan di dashboard');
+  }, 300000);
+}
 
-    // ============================================
-    // ALERT FUNCTIONS
-    // ============================================
-    function showFallAlert(alert) {
-      const container = document.getElementById('fall-alert-container');
-      if (!container) return;
-      
-      const alertDiv = document.createElement('div');
-      alertDiv.className = 'fall-alert';
-      alertDiv.id = `fall-alert-${alert.id}`;
-      
-      const waktu = new Date(alert.waktu);
-      const waktuStr = waktu.toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      });
-      
-      alertDiv.innerHTML = `
-        <div class="fall-alert-header">
-          <div class="fall-alert-icon">⚠️</div>
-          <h3 class="fall-alert-title">FALL DETECTED!</h3>
-        </div>
-        
-        <div class="fall-alert-body">
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">👤 Pasien:</span>
-            <span class="fall-alert-value">${alert.nama_pasien}</span>
-          </div>
-          
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">🏥 Ruangan:</span>
-            <span class="fall-alert-value">${alert.room_id}</span>
-          </div>
-          
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">📋 EMR:</span>
-            <span class="fall-alert-value">${alert.emr_no}</span>
-          </div>
-          
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">💓 Heart Rate:</span>
-            <span class="fall-alert-value">${alert.heart_rate || 'N/A'} bpm</span>
-          </div>
-          
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">🩺 Blood Pressure:</span>
-            <span class="fall-alert-value">${alert.blood_pressure || 'N/A'} mmHg</span>
-          </div>
-          
-          <div class="fall-alert-info">
-            <span class="fall-alert-label">🕐 Waktu:</span>
-            <span class="fall-alert-value">${waktuStr}</span>
-          </div>
-        </div>
-        
-        <div class="fall-alert-footer">
-          <button class="fall-alert-btn btn-acknowledge" onclick="acknowledgeFallAlert(${alert.id})">
-            ✓ Acknowledge
-          </button>
-          <button class="fall-alert-btn btn-close" onclick="closeFallAlert(${alert.id})">
-            ✕ Close
-          </button>
-        </div>
-        
-        <div class="fall-alert-timestamp">
-          Alert received at ${new Date().toLocaleTimeString('id-ID')}
-        </div>
-      `;
-      
-      container.insertBefore(alertDiv, container.firstChild);
-      
-      // Auto-close after 2 minutes
-      setTimeout(() => {
-      console
-        
-      }, 120000);
-    }
+// ============================================
+// ACKNOWLEDGE & CLOSE ALERT
+// ============================================
+function acknowledgeFallAlert(alertId) {
+  console.log('✓ Acknowledging alert:', alertId);
+  stopAlertSound();
+  closeFallAlert(alertId);
+  
+  fetch(`/api/fall-detection/${alertId}/acknowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      acknowledged_by: '<%= nama_perawat %>',
+      timestamp: new Date().toISOString()
+    })
+  }).catch(err => console.error('❌ Acknowledge error:', err));
+}
 
-    // ✅ SIMPLIFY: Cukup close alert, tidak perlu fetch
-    function acknowledgeFallAlert(alertId) {
-      console.log('✓ Acknowledging alert:', alertId);
-      stopAlertSound();
+function closeFallAlert(alertId) {
+  stopAlertSound();
+  
+  const alertDiv = document.getElementById(`fall-alert-${alertId}`);
+  if (alertDiv) {
+    alertDiv.style.animation = 'slideOut 0.3s ease-in';
+    setTimeout(() => {
+      alertDiv.remove();
       
-      if (currentAlertAudio) {
-        currentAlertAudio.pause();
-        currentAlertAudio.currentTime = 0;
-        currentAlertAudio.onended = null;
+      const remainingAlerts = document.querySelectorAll('.fall-alert').length;
+      if ('setAppBadge' in navigator) {
+        if (remainingAlerts === 0) {
+          navigator.clearAppBadge();
+        } else {
+          navigator.setAppBadge(remainingAlerts);
+        }
       }
-      
-      closeFallAlert(alertId);
-    }
+    }, 300);
+  }
+}
 
-    function closeFallAlert(alertId) {
-        // STOP AUDIO
-        stopAlertSound();
-        if (currentAlertAudio) {
-            currentAlertAudio.pause();
-            currentAlertAudio.currentTime = 0;
-            currentAlertAudio.onended = null;
-        }
-        
-        const alertDiv = document.getElementById(`fall-alert-${alertId}`);
-        if (alertDiv) {
-            alertDiv.style.animation = 'slideOut 0.3s ease-in';
-            setTimeout(() => {
-            alertDiv.remove();
-            }, 300);
-        }
-    }
+// ============================================
+// AUDIO FUNCTIONS
+// ============================================
+function unlockAudio() {
+  if (audioUnlocked) return;
 
-    // ============================================
-    // TAB NAVIGATION
-    // ============================================
-    document.querySelectorAll('.tab-button').forEach(button => {
-      button.addEventListener('click', function() {
-        const tabName = this.dataset.tab;
-        
-        // Deactivate all tabs
-        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-        
-        // Activate selected tab
-        this.classList.add('active');
-        document.getElementById(tabName).classList.add('active');
-        
-        // Load data when tab changes
-        if (tabName === 'rawat-jalan') {
-          loadRawatJalanData();
-        } else if (tabName === 'rawat-inap') {
-          loadMetabaseDashboard();
-        }
+  const audio = document.getElementById('fall-alert-sound');
+  if (audio && audio.src) {
+    audio.play()
+      .then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audioUnlocked = true;
+        console.log('✓ Alert sounds enabled');
+      })
+      .catch(err => {
+        console.warn('⚠️ Audio unlock failed:', err.message);
       });
+  }
+}
+
+['click', 'keydown', 'touchstart', 'mousedown'].forEach(event => {
+  document.addEventListener(event, unlockAudio, { once: true });
+});
+
+function playAlertSound() {
+  const audio = document.getElementById('fall-alert-sound');
+  if (!audio || !audio.src) {
+    console.warn('⚠️ No audio source configured');
+    return;
+  }
+
+  currentAlertAudio = audio;
+  audio.loop = true;
+  
+  audio.play()
+    .then(() => {
+      console.log('🔊 Alert sound playing (looping)');
+    })
+    .catch(err => {
+      console.warn('⚠️ Audio play failed:', err.message);
+      
+      const retryPlay = () => {
+        audio.play().then(() => {
+          console.log('✓ Alert sound now playing');
+        });
+        document.removeEventListener('click', retryPlay);
+      };
+      
+      document.addEventListener('click', retryPlay, { once: true });
     });
+}
 
-    // ============================================
-    // RAWAT JALAN DATA LOADING
-    // ============================================
-    async function loadRawatJalanData() {
-      try {
-        console.log('🔄 Loading Rawat Jalan data...');
-        
-        // Load Statistics
-        const statsResponse = await fetch('/api/statistics/today');
-        const statsData = await statsResponse.json();
-        
-        console.log('📊 Stats data:', statsData);
-        
-        if (statsData.success) {
-          const totalVisitsEl = document.getElementById('total-visits');
-          const totalMeasurementsEl = document.getElementById('total-measurements');
-          
-          if (totalVisitsEl) {
-            totalVisitsEl.textContent = statsData.stats.totalVisits || 0;
-            console.log('✓ Total visits updated:', statsData.stats.totalVisits);
-          }
-          
-          if (totalMeasurementsEl) {
-            totalMeasurementsEl.textContent = statsData.stats.totalMeasurements || 0;
-            console.log('✓ Total measurements updated:', statsData.stats.totalMeasurements);
-          }
-        }
+function stopAlertSound() {
+  if (currentAlertAudio) {
+    currentAlertAudio.pause();
+    currentAlertAudio.currentTime = 0;
+    currentAlertAudio.loop = false;
+    currentAlertAudio = null;
+    console.log('🔇 Alert sound stopped');
+  }
+}
 
-        // Load Visits
-        await loadVisitsData();
-
-        // Load Measurements
-        await loadMeasurementsData();
-
-        console.log('✓ Rawat Jalan data loaded successfully');
-      } catch (err) {
-        console.error('❌ Error loading data:', err);
-        alert('Gagal memuat data: ' + err.message);
-      }
+function showAudioUnlockBanner() {
+  const banner = document.createElement('div');
+  banner.id = 'audio-unlock-banner';
+  banner.style.cssText = `
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ff9800;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 6px;
+    z-index: 9998;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    animation: slideDown 0.3s ease-out;
+  `;
+  banner.innerHTML = '🔊 Klik di mana saja untuk mengaktifkan suara alert';
+  
+  banner.onclick = (e) => {
+    e.stopPropagation();
+    unlockAudio();
+    removeBanner();
+  };
+  
+  document.body.appendChild(banner);
+  
+  const globalUnlock = () => {
+    if (!audioUnlocked) {
+      unlockAudio();
+      removeBanner();
+      document.removeEventListener('click', globalUnlock);
     }
-
-    // ============================================
-    // LOAD VISITS TABLE
-    // ============================================
-    async function loadVisitsData() {
-      try {
-        console.log('🔄 Loading visits...');
-        
-        const visitsResponse = await fetch('/api/visits/today');
-        const visitsData = await visitsResponse.json();
-        
-        console.log('📋 Visits data:', visitsData);
-        
-        if (visitsData.success) {
-          const tbody = document.getElementById('visits-table-body');
-          
-          if (!tbody) {
-            console.error('❌ Element #visits-table-body not found');
-            return;
-          }
-          
-          if (visitsData.visits.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data kunjungan hari ini</td></tr>';
-            console.log('ℹ️ No visits today');
-          } else {
-            tbody.innerHTML = visitsData.visits.map(visit => `
-              <tr>
-                <td><strong>${visit.id_kunjungan}</strong></td>
-                <td>${visit.nama_pasien}</td>
-                <td>${visit.emr_no}</td>
-                <td>${visit.keluhan || '-'}</td>
-                <td>${visit.nama_perawat}</td>
-                <td><span class="badge-status badge-${visit.status}">${visit.status === 'aktif' ? 'Aktif' : 'Selesai'}</span></td>
-                <td><span class="badge bg-info">${visit.total_measurements} data</span></td>
-              </tr>
-            `).join('');
-            console.log('✓ Visits table updated with', visitsData.visits.length, 'records');
-          }
-        }
-      } catch (err) {
-        console.error('❌ Error loading visits:', err);
-        const tbody = document.getElementById('visits-table-body');
-        if (tbody) {
-          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error: ' + err.message + '</td></tr>';
-        }
-      }
+  };
+  
+  setTimeout(() => {
+    document.addEventListener('click', globalUnlock);
+  }, 200);
+  
+  setTimeout(() => {
+    if (banner.parentNode) {
+      removeBanner();
+      document.removeEventListener('click', globalUnlock);
     }
+  }, 10000);
+  
+  function removeBanner() {
+    banner.style.animation = 'slideUp 0.3s ease-in';
+    setTimeout(() => banner.remove(), 300);
+  }
+}
 
-    // ============================================
-    // LOAD MEASUREMENTS TABLE
-    // ============================================
-    async function loadMeasurementsData() {
-      try {
-        console.log('🔄 Loading measurements...');
-        
-        const measurementsResponse = await fetch('/api/measurements/today');
-        const measurementsData = await measurementsResponse.json();
-        
-        console.log('💉 Measurements data:', measurementsData);
-        
-        if (measurementsData.success) {
-          const tbody = document.getElementById('measurements-table-body');
-          
-          if (!tbody) {
-            console.error('❌ Element #measurements-table-body not found');
-            return;
-          }
-          
-          const isAdmin = '<%= role %>' === 'admin';
-          const colspan = isAdmin ? '5' : '4';
-          
-          if (measurementsData.measurements.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">Tidak ada pengukuran hari ini</td></tr>`;
-            console.log('ℹ️ No measurements today');
-          } else {
-            tbody.innerHTML = measurementsData.measurements.map(m => {
-              const perawatColumn = isAdmin ? `<td>${m.nama_perawat}</td>` : '';
-              return `
-                <tr>
-                  <td>${new Date(m.timestamp).toLocaleTimeString('id-ID')}</td>
-                  <td>${m.nama_pasien}</td>
-                  <td><span class="badge bg-success">${m.tipe_device}</span></td>
-                  <td><strong>${m.data}</strong></td>
-                  ${perawatColumn}
-                </tr>
-              `;
-            }).join('');
-            console.log('✓ Measurements table updated with', measurementsData.measurements.length, 'records');
-          }
-        }
-      } catch (err) {
-        console.error('❌ Error loading measurements:', err);
-        const tbody = document.getElementById('measurements-table-body');
-        if (tbody) {
-          const colspan = '<%= role %>' === 'admin' ? '5' : '4';
-          tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger py-4">Error: ${err.message}</td></tr>`;
-        }
-      }
+// ============================================
+// TAB NAVIGATION
+// ============================================
+document.querySelectorAll('.tab-button').forEach(button => {
+  button.addEventListener('click', function() {
+    const tabName = this.dataset.tab;
+    
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    this.classList.add('active');
+    document.getElementById(tabName).classList.add('active');
+    
+    if (tabName === 'rawat-jalan') {
+      loadRawatJalanData();
+    } else if (tabName === 'rawat-inap') {
+      loadMetabaseDashboard();
     }
+  });
+});
 
-    // ============================================
-    // METABASE DASHBOARD LOADING
-    // ============================================
-    async function loadMetabaseDashboard() {
-      const loadingDiv = document.getElementById('metabase-loading');
-      const iframe = document.getElementById('metabase-iframe');
+// ============================================
+// RAWAT JALAN DATA LOADING
+// ============================================
+async function loadRawatJalanData() {
+  try {
+    console.log('🔄 Loading Rawat Jalan data...');
+    
+    const statsResponse = await fetch('/api/statistics/today');
+    const statsData = await statsResponse.json();
+    
+    console.log('📊 Stats data:', statsData);
+    
+    if (statsData.success) {
+      const totalVisitsEl = document.getElementById('total-visits');
+      const totalMeasurementsEl = document.getElementById('total-measurements');
       
-      if (!loadingDiv || !iframe) {
-        console.error('❌ Elements not found');
+      if (totalVisitsEl) {
+        totalVisitsEl.textContent = statsData.stats.totalVisits || 0;
+        console.log('✓ Total visits updated:', statsData.stats.totalVisits);
+      }
+      
+      if (totalMeasurementsEl) {
+        totalMeasurementsEl.textContent = statsData.stats.totalMeasurements || 0;
+        console.log('✓ Total measurements updated:', statsData.stats.totalMeasurements);
+      }
+    }
+
+    await loadVisitsData();
+    await loadMeasurementsData();
+
+    console.log('✓ Rawat Jalan data loaded successfully');
+  } catch (err) {
+    console.error('❌ Error loading data:', err);
+    alert('Gagal memuat data: ' + err.message);
+  }
+}
+
+// ============================================
+// LOAD VISITS TABLE
+// ============================================
+async function loadVisitsData() {
+  try {
+    console.log('🔄 Loading visits...');
+    
+    const visitsResponse = await fetch('/api/visits/today');
+    const visitsData = await visitsResponse.json();
+    
+    console.log('📋 Visits data:', visitsData);
+    
+    if (visitsData.success) {
+      const tbody = document.getElementById('visits-table-body');
+      
+      if (!tbody) {
+        console.error('❌ Element #visits-table-body not found');
         return;
       }
       
-      // Show loading with smooth fade
-      loadingDiv.style.display = 'flex';
-      loadingDiv.style.opacity = '1';
-      loadingDiv.style.transition = 'opacity 0.3s ease';
-      iframe.style.display = 'none';
+      if (visitsData.visits.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data kunjungan hari ini</td></tr>';
+        console.log('ℹ️ No visits today');
+      } else {
+        tbody.innerHTML = visitsData.visits.map(visit => `
+          <tr>
+            <td><strong>${visit.id_kunjungan}</strong></td>
+            <td>${visit.nama_pasien}</td>
+            <td>${visit.emr_pasien}</td>
+            <td>${visit.keluhan || '-'}</td>
+            <td>${visit.nama_perawat}</td>
+            <td><span class="badge-status badge-${visit.status}">${visit.status === 'aktif' ? 'Aktif' : 'Selesai'}</span></td>
+            <td><span class="badge bg-info">${visit.total_measurements} data</span></td>
+          </tr>
+        `).join('');
+        console.log('✓ Visits table updated with', visitsData.visits.length, 'records');
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error loading visits:', err);
+    const tbody = document.getElementById('visits-table-body');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error: ' + err.message + '</td></tr>';
+    }
+  }
+}
+
+// ============================================
+// LOAD MEASUREMENTS TABLE
+// ============================================
+async function loadMeasurementsData() {
+  try {
+    console.log('🔄 Loading measurements...');
+    
+    const measurementsResponse = await fetch('/api/measurements/today');
+    const measurementsData = await measurementsResponse.json();
+    
+    console.log('💉 Measurements data:', measurementsData);
+    
+    if (measurementsData.success) {
+      const tbody = document.getElementById('measurements-table-body');
       
-      try {
-        console.log('🔄 Loading Metabase...');
+      if (!tbody) {
+        console.error('❌ Element #measurements-table-body not found');
+        return;
+      }
+      
+      const isAdmin = '<%= role %>' === 'admin';
+      const colspan = isAdmin ? '5' : '4';
+      
+      if (measurementsData.measurements.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">Tidak ada pengukuran hari ini</td></tr>`;
+        console.log('ℹ️ No measurements today');
+      } else {
+        tbody.innerHTML = measurementsData.measurements.map(m => {
+          const perawatColumn = isAdmin ? `<td>${m.nama_perawat}</td>` : '';
+          return `
+            <tr>
+              <td>${new Date(m.timestamp).toLocaleTimeString('id-ID')}</td>
+              <td>${m.nama_pasien}</td>
+              <td><span class="badge bg-success">${m.tipe_device}</span></td>
+              <td><strong>${m.data}</strong></td>
+              ${perawatColumn}
+            </tr>
+          `;
+        }).join('');
+        console.log('✓ Measurements table updated with', measurementsData.measurements.length, 'records');
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error loading measurements:', err);
+    const tbody = document.getElementById('measurements-table-body');
+    if (tbody) {
+      const colspan = '<%= role %>' === 'admin' ? '5' : '4';
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger py-4">Error: ${err.message}</td></tr>`;
+    }
+  }
+}
+
+// ============================================
+// METABASE DASHBOARD LOADING
+// ============================================
+async function loadMetabaseDashboard() {
+  const loadingDiv = document.getElementById('metabase-loading');
+  const iframe = document.getElementById('metabase-iframe');
+  
+  if (!loadingDiv || !iframe) {
+    console.error('❌ Elements not found');
+    return;
+  }
+  
+  loadingDiv.style.display = 'flex';
+  loadingDiv.style.opacity = '1';
+  loadingDiv.style.transition = 'opacity 0.3s ease';
+  iframe.style.display = 'none';
+  
+  try {
+    console.log('🔄 Loading Metabase...');
+    
+    const response = await fetch('/api/metabase/rawat-inap-token');
+    const data = await response.json();
+    
+    console.log('📊 API Response:', data);
+    
+    if (data.success && data.embedUrl) {
+      iframe.src = data.embedUrl;
+      
+      iframe.onload = function() {
+        console.log('✓ Iframe loaded');
         
-        const response = await fetch('/api/metabase/rawat-inap-token');
-        const data = await response.json();
+        loadingDiv.style.opacity = '0';
         
-        console.log('📊 API Response:', data);
-        
-        if (data.success && data.embedUrl) {
-          iframe.src = data.embedUrl;
+        setTimeout(() => {
+          loadingDiv.style.display = 'none';
+          iframe.style.display = 'block';
+          iframe.style.opacity = '0';
+          iframe.style.transition = 'opacity 0.3s ease';
           
-          iframe.onload = function() {
-            console.log('✓ Iframe loaded');
-            
-            // Smooth fade out loading
-            loadingDiv.style.opacity = '0';
-            
-            setTimeout(() => {
-              loadingDiv.style.display = 'none';
-              iframe.style.display = 'block';
-              iframe.style.opacity = '0';
-              iframe.style.transition = 'opacity 0.3s ease';
-              
-              // Fade in iframe
-              requestAnimationFrame(() => {
-                iframe.style.opacity = '1';
-              });
-            }, 300);
-          };
-          
-          iframe.onerror = function() {
-            console.error('❌ Iframe failed to load');
-            loadingDiv.innerHTML = `
-              <div style="text-align: center; color: #dc3545;">
-                <i class="fas fa-exclamation-triangle" style="font-size: 48px;"></i>
-                <p style="margin-top: 15px;"><strong>Gagal memuat dashboard</strong></p>
-                <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary mt-3">
-                  <i class="fas fa-sync"></i> Coba Lagi
-                </button>
-              </div>
-            `;
-          };
-          
-          // Fallback timeout (5 detik)
-          setTimeout(() => {
-            if (iframe.style.display === 'none') {
-              console.log('⏱️ Timeout: showing iframe anyway');
-              loadingDiv.style.opacity = '0';
-              setTimeout(() => {
-                loadingDiv.style.display = 'none';
-                iframe.style.display = 'block';
-                iframe.style.opacity = '1';
-              }, 300);
-            }
-          }, 5000);
-          
-        } else {
-          throw new Error(data.error || 'Invalid response');
-        }
-      } catch (err) {
-        console.error('❌ Error:', err);
+          requestAnimationFrame(() => {
+            iframe.style.opacity = '1';
+          });
+        }, 300);
+      };
+      
+      iframe.onerror = function() {
+        console.error('❌ Iframe failed to load');
         loadingDiv.innerHTML = `
-          <div style="text-align: center; color: #dc3545; padding: 40px;">
-            <i class="fas fa-exclamation-circle" style="font-size: 48px;"></i>
+          <div style="text-align: center; color: #dc3545;">
+            <i class="fas fa-exclamation-triangle" style="font-size: 48px;"></i>
             <p style="margin-top: 15px;"><strong>Gagal memuat dashboard</strong></p>
-            <p style="color: #666;">${err.message}</p>
             <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary mt-3">
               <i class="fas fa-sync"></i> Coba Lagi
             </button>
           </div>
         `;
-      }
+      };
+      
+      setTimeout(() => {
+        if (iframe.style.display === 'none') {
+          console.log('⏱️ Timeout: showing iframe anyway');
+          loadingDiv.style.opacity = '0';
+          setTimeout(() => {
+            loadingDiv.style.display = 'none';
+            iframe.style.display = 'block';
+            iframe.style.opacity = '1';
+          }, 300);
+        }
+      }, 5000);
+      
+    } else {
+      throw new Error(data.error || 'Invalid response');
     }
-    
-    // ============================================
-    // GLOBAL STATE
-    // ============================================
-    let audioUnlocked = false;
-    let currentAlertAudio = null;
+  } catch (err) {
+    console.error('❌ Error:', err);
+    loadingDiv.innerHTML = `
+      <div style="text-align: center; color: #dc3545; padding: 40px;">
+        <i class="fas fa-exclamation-circle" style="font-size: 48px;"></i>
+        <p style="margin-top: 15px;"><strong>Gagal memuat dashboard</strong></p>
+        <p style="color: #666;">${err.message}</p>
+        <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary mt-3">
+          <i class="fas fa-sync"></i> Coba Lagi
+        </button>
+      </div>
+    `;
+  }
+}
 
-    // ============================================
-    // UNLOCK AUDIO ON FIRST INTERACTION
-    // ============================================
-    function unlockAudio() {
-    if (audioUnlocked) return;
-
-    const audio = document.getElementById('fall-alert-sound');
-    if (audio) {
-        audio.play()
-        .then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            audioUnlocked = true;
-            console.log('✓ Alert sounds enabled');
-        })
-        .catch(() => {
-            // Ignore error on unlock attempt
-        });
-    }
-    }
-
-    // Listen for interactions
-    ['click', 'keydown', 'touchstart', 'mousedown'].forEach(event => {
-    document.addEventListener(event, unlockAudio, { once: true });
+// ============================================
+// INITIALIZATION
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('✓ Page loaded, initializing...');
+  
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().then(permission => {
+      console.log('📢 Notification permission:', permission);
     });
-
-    // ============================================
-    // PLAY ALERT SOUND
-    // ============================================
-    function playAlertSound() {
-    const audio = document.getElementById('fall-alert-sound');
-    if (!audio) return;
-
-    currentAlertAudio = audio;
-    audio.loop = true;
-        audio.play()
-        .then(() => {
-        console.log('🔊 Alert sound looping');
-        })
-        .catch(() => {
-        console.warn('⚠️ Click anywhere to enable sound');
-
-        const retryPlay = () => {
-            audio.play().then(() => {
-            console.log('✓ Alert sound now looping');
-            });
-            document.removeEventListener('click', retryPlay);
-        };
-
-        document.addEventListener('click', retryPlay, { once: true });
-        });
+  }
+  
+  startFallDetectionPolling();
+  
+  setTimeout(() => {
+    if (!audioUnlocked) {
+      showAudioUnlockBanner();
     }
-
-    // ============================================
-    // STOP ALERT SOUND
-    // ============================================
-    function stopAlertSound() {
-        if (currentAlertAudio) {
-            currentAlertAudio.pause();
-            currentAlertAudio.currentTime = 0;
-            currentAlertAudio.loop = false;
-        }
+  }, 3000);
+  
+  const requiredElements = [
+    'total-visits',
+    'total-measurements',
+    'visits-table-body',
+    'measurements-table-body'
+  ];
+  
+  const allElementsExist = requiredElements.every(id => {
+    const exists = document.getElementById(id) !== null;
+    if (!exists) {
+      console.error(`❌ Required element #${id} not found`);
     }
+    return exists;
+  });
+  
+  if (allElementsExist) {
+    console.log('✓ All required elements found');
+    loadRawatJalanData();
+  } else {
+    console.warn('⚠️ Some elements missing, retrying...');
+    setTimeout(() => loadRawatJalanData(), 500);
+  }
+  
+  console.log('✓ Fall detection client initialized');
+});
 
-    // ============================================
-    // INITIALIZATION (GABUNGAN)
-    // ============================================
-    document.addEventListener('DOMContentLoaded', function() {
-      // Request notification permission
-      if ("Notification" in window && Notification.permission === "default") {
-        Notification.requestPermission().then(permission => {
-          console.log('📢 Notification permission:', permission);
-        });
-      }
-      console.log('✓ Page loaded, initializing...');
-        
-        // Audio unlock banner
-        setTimeout(() => {
-          if (!audioUnlocked) {
-            console.warn('⚠️ Click anywhere to enable alert sounds');
-            const banner = document.createElement('div');
-            banner.style.cssText = `
-              position: fixed;
-              top: 70px;
-              left: 50%;
-              transform: translateX(-50%);
-              background: #ff9800;
-              color: white;
-              padding: 10px 20px;
-              border-radius: 6px;
-              z-index: 9998;
-              box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-              font-size: 14px;
-              font-weight: 600;
-              cursor: pointer;
-              animation: slideDown 0.3s ease-out;
-              pointer-events: none;
-            `;
-            banner.innerHTML = '🔊 Klik di mana saja untuk mengaktifkan suara alert <small style="opacity: 0.8; margin-left: 10px;">(klik sini juga bisa)</small>';
-            
-            // Banner sendiri bisa diklik
-            banner.style.pointerEvents = 'auto';
-            banner.onclick = (e) => {
-              e.stopPropagation();
-              if (!audioUnlocked) {
-                unlockAudio();
-                banner.style.animation = 'slideUp 0.3s ease-in';
-                setTimeout(() => banner.remove(), 300);
-                document.removeEventListener('click', globalUnlock);
-              }
-            };
-            
-            document.body.appendChild(banner);
-            
-            // Global click handler untuk SELURUH halaman
-            const globalUnlock = (e) => {
-              if (!audioUnlocked) {
-                unlockAudio();
-                banner.style.animation = 'slideUp 0.3s ease-in';
-                setTimeout(() => banner.remove(), 300);
-                document.removeEventListener('click', globalUnlock);
-              }
-            };
-            
-            // Delay sedikit agar tidak langsung tertrigger
-            setTimeout(() => {
-              document.addEventListener('click', globalUnlock);
-            }, 200);
-            
-            // Auto-dismiss after 10 seconds
-            setTimeout(() => {
-              if (banner.parentNode && !audioUnlocked) {
-                banner.style.animation = 'slideUp 0.3s ease-in';
-                setTimeout(() => {
-                  banner.remove();
-                  document.removeEventListener('click', globalUnlock);
-                }, 300);
-              }
-            }, 10000);
-          }
-        }, 3000);
-
-        // Validate elements
-        const requiredElements = [
-            'total-visits',
-            'total-measurements',
-            'visits-table-body',
-            'measurements-table-body'
-        ];
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('✓ Service Worker registered'))
-            .catch(err => console.error('❌ SW registration failed'));
-        }
-        const allElementsExist = requiredElements.every(id => {
-            const exists = document.getElementById(id) !== null;
-            if (!exists) {
-            console.error(`❌ Required element #${id} not found`);
-            }
-            return exists;
-        });
-        
-        if (allElementsExist) {
-            console.log('✓ All required elements found, loading data...');
-            loadRawatJalanData();
-        } else {
-            console.error('❌ Some required elements are missing, retrying...');
-            setTimeout(() => {
-            loadRawatJalanData();
-            }, 500);
-        }
-    });
-
-    console.log('✓ Fall detection client initialized');
-    if ('setAppBadge' in navigator) {
-    // Update badge saat ada fall alert
-    navigator.setAppBadge(1);
-
-    // Clear badge saat alert di-acknowledge
-    navigator.clearAppBadge();
-    }
+// ============================================
+// CLEANUP ON PAGE UNLOAD
+// ============================================
+window.addEventListener('beforeunload', () => {
+  if (fallCheckInterval) {
+    clearInterval(fallCheckInterval);
+  }
+  stopAlertSound();
+});
   </script>
 </body>
 </html>
