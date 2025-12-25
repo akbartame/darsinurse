@@ -802,8 +802,20 @@
       console.error('❌ Socket connection error:', error);
       setTimeout(() => socket.connect(), 3000);
     });
+    function addLog(message, type = 'info') {
+      // Function kosong (untuk monitoring dashboard, tidak ada activity log)
+      // Jadi cukup console.log saja
+      console.log(`[${type.toUpperCase()}] ${message}`);
+    }
+
+    function showStatus(type, message, alertType = 'info') {
+      // Tidak ada status div di monitoring dashboard
+      // Jadi cukup log saja
+      console.log(`[STATUS] ${message}`);
+    }
 
         // FALL ALERT LISTENER - gunakan event 'fall-alert'
+    // ✅ PRIMARY LISTENER - Listen event 'fall-alert'
     // ✅ PRIMARY LISTENER - Listen event 'fall-alert'
     socket.on('fall-alert', (alert) => {
       console.log('🚨🚨🚨 FALL ALERT DITERIMA DI DASHBOARD!');
@@ -815,9 +827,35 @@
         return;
       }
       
-      // ✅ TAMPILKAN ALERT
+      // 1️⃣ SUARA
       playAlertSound();
+      
+      // 2️⃣ VISUAL POPUP
       showFallAlert(alert);
+      
+      // 3️⃣ DESKTOP NOTIFICATION
+      if (Notification.permission === 'granted') {
+        const notification = new Notification('🚨 FALL ALERT!', {
+          body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
+          icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="80" fill="red">⚠️</text></svg>',
+          tag: `fall-${alert.id}`,
+          requireInteraction: true,
+          vibrate: [200, 100, 200],
+          badge: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="red"/></svg>'
+        });
+        
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      }
+      
+      // 4️⃣ BADGE API (Update unread count)
+      if ('setAppBadge' in navigator) {
+        navigator.setAppBadge(1);
+      }
+      
+      // 5️⃣ LOG
       addLog(`🚨 FALL DETECTED: ${alert.nama_pasien} (EMR: ${alert.emr_no})`, 'error');
       
       console.log('✓ Alert ditampilkan di dashboard');
@@ -1226,6 +1264,7 @@
         `;
       }
     }
+    
     // ============================================
     // GLOBAL STATE
     // ============================================
@@ -1346,7 +1385,11 @@
             'visits-table-body',
             'measurements-table-body'
         ];
-        
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('✓ Service Worker registered'))
+            .catch(err => console.error('❌ SW registration failed'));
+        }
         const allElementsExist = requiredElements.every(id => {
             const exists = document.getElementById(id) !== null;
             if (!exists) {
@@ -1367,6 +1410,13 @@
     });
 
     console.log('✓ Fall detection client initialized');
+    if ('setAppBadge' in navigator) {
+    // Update badge saat ada fall alert
+    navigator.setAppBadge(1);
+
+    // Clear badge saat alert di-acknowledge
+    navigator.clearAppBadge();
+    }
   </script>
 </body>
 </html>
