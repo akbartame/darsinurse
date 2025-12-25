@@ -79,10 +79,14 @@ pool.on('connection', (connection) => {
 const isDevelopment = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
 
+// ✅ Allow forcing insecure cookies (for local testing in production mode)
+const forceInsecure = process.env.FORCE_INSECURE_COOKIES === 'true';
+
 console.log('🌍 Environment detected:', {
   NODE_ENV: process.env.NODE_ENV || 'development',
   isDevelopment,
-  isProduction
+  isProduction,
+  forceInsecure: forceInsecure ? '⚠️ YES (testing only!)' : 'no'
 });
 
 // 2️⃣ TRUST PROXY (conditional)
@@ -138,7 +142,11 @@ const sessionConfig = {
   proxy: isProduction, // Only trust proxy in production
   cookie: {
     httpOnly: true,
-    secure: isProduction ? 'auto' : false, // ✅ false in dev, auto in prod
+    // ✅ Smart cookie security:
+    // - Development: always false (HTTP OK)
+    // - Production + force insecure: false (for local testing)
+    // - Production normal: 'auto' (requires HTTPS)
+    secure: isDevelopment ? false : (forceInsecure ? false : 'auto'),
     sameSite: isProduction ? 'lax' : 'lax',
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: '/'
@@ -148,7 +156,8 @@ const sessionConfig = {
 console.log('🍪 Cookie settings:', {
   secure: sessionConfig.cookie.secure,
   sameSite: sessionConfig.cookie.sameSite,
-  proxy: sessionConfig.proxy
+  proxy: sessionConfig.proxy,
+  warning: forceInsecure ? '⚠️ INSECURE COOKIES ENABLED - DO NOT USE IN REAL PRODUCTION!' : null
 });
 
 app.use(session(sessionConfig));
@@ -405,7 +414,6 @@ app.get('/debug/test-session', (req, res) => {
     });
   });
 });
-
 const requireAdmin = (req, res, next) => {
   if (!req.session.emr_perawat) {
     return res.redirect('/login');
