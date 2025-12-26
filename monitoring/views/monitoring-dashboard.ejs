@@ -1118,12 +1118,13 @@
     const initializeAudio = () => {
       try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        alertAudioBuffer = generateAlertSound();
+        alertAudioBuffer = document.getElementById('fall-alert-sound');
         console.log('✓ Alert audio initialized');
       } catch (err) {
         console.error('❌ Audio init failed:', err);
       }
     };
+
 
     // ============================================
     // SOCKET.IO CONNECTION
@@ -1598,11 +1599,9 @@ setTimeout(() => playAlertSound(), 500);
         }
         
         // Create and start source
-        audioSource = audioContext.createBufferSource();
-        audioSource.buffer = alertAudioBuffer;
-        audioSource.loop = true; // Loop the sound
-        audioSource.connect(audioContext.destination);
-        audioSource.start(0);
+        alertAudioBuffer.loop = true; // Loop the sound
+        alertAudioBuffer.connect(audioContext.destination);
+        alertAudioBuffer.start(0);
         
         isAudioPlaying = true; // ✅ Mark as playing
         
@@ -1614,20 +1613,18 @@ setTimeout(() => playAlertSound(), 500);
     }
 
     function stopAlertSound() {
-      if (audioSource) {
+      if (alertAudioBuffer) {
         try {
-          audioSource.stop();
-          audioSource.disconnect();
+          alertAudioBuffer.pause();
+          alertAudioBuffer.currentTime = 0;
           console.log('🔇 Alert sound stopped');
         } catch (err) {
           console.warn('⚠️ Audio stop error:', err);
         }
-        audioSource = null;
       }
       
-      isAudioPlaying = false; // ✅ Mark as stopped
+      isAudioPlaying = false;
     }
-
 
     // ============================================
     // BADGE COUNT & TITLE UPDATE
