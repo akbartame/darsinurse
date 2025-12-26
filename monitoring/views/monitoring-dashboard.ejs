@@ -1117,13 +1117,22 @@
 
     const initializeAudio = () => {
       try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        alertAudioBuffer = document.getElementById('fall-alert-sound');
-        console.log('✓ Alert audio initialized');
+        const audioElement = document.getElementById('fall-alert-sound');
+        
+        if (!audioElement) {
+          console.error('❌ Audio element not found in DOM');
+          return false;
+        }
+        
+        currentAlertAudio = audioElement;
+        console.log('✓ Alert audio element initialized');
+        return true;
       } catch (err) {
         console.error('❌ Audio init failed:', err);
+        return false;
       }
     };
+
 
 
     // ============================================
@@ -1575,56 +1584,70 @@ setTimeout(() => playAlertSound(), 500);
     // AUDIO FUNCTIONS
     // ============================================
     function playAlertSound() {
-      if (!audioContext || !alertAudioBuffer) {
-        console.warn('⚠️ Audio not initialized');
-        initializeAudio();
-        return;
+      if (!currentAlertAudio) {
+        console.warn('⚠️ Audio element not initialized');
+        if (!initializeAudio()) return;
       }
       
-      // ✅ Don't play if already playing
+      // Don't play if already playing
       if (isAudioPlaying) {
         console.log('🔊 Audio already playing');
         return;
       }
       
-      // Stop existing audio first (safety)
-      if (audioSource) {
-        stopAlertSound();
-      }
-      
       try {
-        // Resume context if suspended
-        if (audioContext.state === 'suspended') {
-          audioContext.resume();
+        // Reset audio to beginning
+        currentAlertAudio.currentTime = 0;
+        
+        // Play with promise handling
+        const playPromise = currentAlertAudio.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              isAudioPlaying = true;
+              console.log('🔊 Alert sound started');
+            })
+            .catch(err => {
+              console.error('❌ Audio play failed:', err.message);
+              isAudioPlaying = false;
+              
+              // Retry on user interaction
+              if (err.name === 'NotAllowedError') {
+                console.warn('⚠️ Audio blocked by browser - waiting for user interaction');
+                unlockAudio();
+              }
+            });
+        } else {
+          // Fallback for older browsers
+          isAudioPlaying = true;
+          console.log('🔊 Alert sound started (legacy)');
         }
-        
-        // Create and start source
-        alertAudioBuffer.loop = true; // Loop the sound
-        alertAudioBuffer.connect(audioContext.destination);
-        alertAudioBuffer.start(0);
-        
-        isAudioPlaying = true; // ✅ Mark as playing
-        
-        console.log('🔊 Alert sound started (looping)');
       } catch (err) {
         console.error('❌ Audio play error:', err);
         isAudioPlaying = false;
       }
     }
-
+    
     function stopAlertSound() {
-      if (alertAudioBuffer) {
-        try {
-          alertAudioBuffer.pause();
-          alertAudioBuffer.currentTime = 0;
-          console.log('🔇 Alert sound stopped');
-        } catch (err) {
-          console.warn('⚠️ Audio stop error:', err);
-        }
+      if (!currentAlertAudio) return;
+      
+      try {
+        // Pause the audio
+        currentAlertAudio.pause();
+        
+        // Reset to beginning
+        currentAlertAudio.currentTime = 0;
+        
+        console.log('🔇 Alert sound stopped');
+      } catch (err) {
+        console.warn('⚠️ Error stopping audio:', err.message);
       }
       
       isAudioPlaying = false;
     }
+
+
 
     // ============================================
     // BADGE COUNT & TITLE UPDATE
@@ -1684,22 +1707,20 @@ setTimeout(() => playAlertSound(), 500);
     function unlockAudio() {
       if (audioUnlocked) return;
       
-      initializeAudio();
+      // Initialize audio
+      if (!initializeAudio()) {
+        console.warn('⚠️ Audio initialization failed');
+        return;
+      }
       
-      if (audioContext) {
-        audioContext.resume().then(() => {
-          audioUnlocked = true;
-          console.log('✓ Alert sounds enabled');
-          
-          // Remove banner if exists
-          const banner = document.getElementById('audio-unlock-banner');
-          if (banner) {
-            banner.style.animation = 'slideUp 0.3s ease-in';
-            setTimeout(() => banner.remove(), 300);
-          }
-        }).catch(err => {
-          console.warn('⚠️ Audio unlock failed:', err);
-        });
+      audioUnlocked = true;
+      console.log('✓ Alert sounds enabled');
+      
+      // Remove banner if exists
+      const banner = document.getElementById('audio-unlock-banner');
+      if (banner) {
+        banner.style.animation = 'slideUp 0.3s ease-in';
+        setTimeout(() => banner.remove(), 300);
       }
     }
 
@@ -1963,12 +1984,10 @@ setTimeout(() => playAlertSound(), 500);
     // CLEANUP ON PAGE UNLOAD
     // ============================================
     window.addEventListener('beforeunload', () => {
-      if (fallCheckInterval) {
-        clearInterval(fallCheckInterval);
-      }
       stopAlertSound();
-      if (audioContext) {
-        audioContext.close();
+      if (currentAlertAudio) {
+        currentAlertAudio.pause();
+        currentAlertAudio = null;
       }
     });
   </script>
