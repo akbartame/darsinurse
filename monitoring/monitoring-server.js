@@ -1,5 +1,5 @@
 /* ============================================================
-   DARSINURSE GATEWAY - MONITORING SERVER (FIXED)
+   DARSINURSE GATEWAY - MONITORING SERVER (FULLY FIXED)
    ============================================================ */
 
 const express = require('express');
@@ -17,28 +17,24 @@ const { io: io_client } = require('socket.io-client');
 
 const app = express();
 const PORT = process.env.MONITORING_PORT || 5000;
+
+// ✅ Global variables
 const processedFallIds = new Set();
 let lastCheckedVitalId = 0;
-const FALL_CHECK_INTERVAL = 10000; // ✅ FIX: 10 seconds instead of 1 second
-const PROCESSED_IDS_LIMIT = 1000; // ✅ Limit memory usage
+const FALL_CHECK_INTERVAL = 10000; // 10 seconds
+const PROCESSED_IDS_LIMIT = 1000;
 
 /* ============================================================
-   FIXED: SESSION-BASED FALL ALERT TRACKING
-   Tambahkan di server.js monitoring setelah deklarasi variabel global
+   SESSION-BASED FALL ALERT TRACKING
    ============================================================ */
-
-// ✅ ADD: Track displayed alerts per user session
-const userDisplayedAlerts = new Map(); // sessionID -> Set of fall IDs
+const userDisplayedAlerts = new Map();
 const SESSION_CLEANUP_INTERVAL = 3600000; // 1 hour
 
-// ✅ Cleanup old sessions periodically
 setInterval(() => {
-  const now = Date.now();
   let cleanedCount = 0;
   
   userDisplayedAlerts.forEach((alertSet, sessionId) => {
-    // Check if session still exists (simple heuristic: size check)
-    if (alertSet.size > 1000) { // If too many alerts tracked, clean it
+    if (alertSet.size > 1000) {
       userDisplayedAlerts.delete(sessionId);
       cleanedCount++;
     }
@@ -50,183 +46,6 @@ setInterval(() => {
 }, SESSION_CLEANUP_INTERVAL);
 
 /* ============================================================
-   FIXED: FALL DETECTION API WITH SESSION TRACKING
-   GANTI endpoint /api/fall-detection/latest yang lama
-   ============================================================ */
-
-app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    const [falls] = await conn.query(`
-      SELECT 
-        v.id,
-        v.emr_no,
-        v.waktu,
-        v.fall_detected,
-        v.heart_rate,
-        v.sistolik,
-        v.diastolik,
-        p.nama as nama_pasien,
-        p.poli,
-        rd.room_id,
-        rd.device_id
-      FROM vitals v
-      LEFT JOIN pasien p ON v.emr_no = p.emr_no
-      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
-      WHERE v.fall_detected = 1 
-      AND v.waktu >= ?
-      ORDER BY v.waktu DESC
-      LIMIT 50
-    `, [oneDayAgo]);
-    
-    conn.release();
-    
-    // ✅ GET session ID
-    const sessionId = req.sessionID;
-    
-    // ✅ GET or CREATE set of displayed alerts for this session
-    if (!userDisplayedAlerts.has(sessionId)) {
-      userDisplayedAlerts.set(sessionId, new Set());
-    }
-    
-    const displayedIds = userDisplayedAlerts.get(sessionId);
-    
-    // ✅ FILTER: Only return falls NOT yet displayed to this user
-    const newFalls = falls.filter(fall => !displayedIds.has(fall.id));
-    
-    console.log(`📊 [${req.session.nama_perawat}] Fall detection check:`);
-    console.log(`   Total falls (24h): ${falls.length}`);
-    console.log(`   Already displayed: ${displayedIds.size}`);
-    console.log(`   New falls: ${newFalls.length}`);
-    
-    res.json({ 
-      success: true, 
-      falls: newFalls,
-      count: newFalls.length,
-      totalToday: falls.length,
-      displayedCount: displayedIds.size,
-      lastCheckedId: lastCheckedVitalId
-    });
-  } catch (err) {
-    console.error('❌ Fall detection API error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Database error: ' + err.message 
-    });
-  }
-});
-
-/* ============================================================
-   NEW ENDPOINT: Mark Falls as Displayed
-   ============================================================ */
-
-app.post('/api/fall-detection/mark-displayed', requireAdminOrPerawat, (req, res) => {
-  try {
-    const { fallIds } = req.body;
-    
-    if (!Array.isArray(fallIds) || fallIds.length === 0) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'fallIds must be a non-empty array' 
-      });
-    }
-    
-    const sessionId = req.sessionID;
-    
-    // Get or create set for this session
-    if (!userDisplayedAlerts.has(sessionId)) {
-      userDisplayedAlerts.set(sessionId, new Set());
-    }
-    
-    const displayedIds = userDisplayedAlerts.get(sessionId);
-    
-    // Mark all as displayed
-    fallIds.forEach(id => {
-      displayedIds.add(parseInt(id));
-    });
-    
-    console.log(`✓ [${req.session.nama_perawat}] Marked ${fallIds.length} fall(s) as displayed`);
-    console.log(`   Session total displayed: ${displayedIds.size}`);
-    
-    res.json({ 
-      success: true, 
-      message: `${fallIds.length} fall alert(s) marked as displayed`,
-      totalDisplayed: displayedIds.size
-    });
-  } catch (err) {
-    console.error('❌ Mark displayed error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: err.message 
-    });
-  }
-});
-
-/* ============================================================
-   NEW ENDPOINT: Reset Displayed Alerts (for testing/admin)
-   ============================================================ */
-
-app.post('/api/fall-detection/reset-displayed', requireAdminOrPerawat, (req, res) => {
-  try {
-    const sessionId = req.sessionID;
-    
-    if (userDisplayedAlerts.has(sessionId)) {
-      const count = userDisplayedAlerts.get(sessionId).size;
-      userDisplayedAlerts.delete(sessionId);
-      
-      console.log(`🔄 [${req.session.nama_perawat}] Reset ${count} displayed alerts`);
-      
-      res.json({ 
-        success: true, 
-        message: `Reset ${count} displayed alerts`,
-        clearedCount: count
-      });
-    } else {
-      res.json({ 
-        success: true, 
-        message: 'No displayed alerts to reset',
-        clearedCount: 0
-      });
-    }
-  } catch (err) {
-    console.error('❌ Reset displayed error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: err.message 
-    });
-  }
-});
-
-/* ============================================================
-   UPDATED: Get Statistics (include session info)
-   ============================================================ */
-
-app.get('/api/fall-detection/stats', requireAdmin, (req, res) => {
-  const sessionId = req.sessionID;
-  const myDisplayedCount = userDisplayedAlerts.has(sessionId) 
-    ? userDisplayedAlerts.get(sessionId).size 
-    : 0;
-  
-  res.json({
-    success: true,
-    stats: {
-      lastCheckedVitalId,
-      processedFallsCount: processedFallIds.size,
-      pollingInterval: FALL_CHECK_INTERVAL,
-      rawajalanConnected: rawajalanSocket.connected,
-      connectedClients: io.engine.clientsCount,
-      // ✅ NEW: Session tracking stats
-      activeSessions: userDisplayedAlerts.size,
-      myDisplayedAlerts: myDisplayedCount,
-      totalTrackedAlerts: Array.from(userDisplayedAlerts.values())
-        .reduce((sum, set) => sum + set.size, 0)
-    }
-  });
-});
-
-/* ============================================================
    HASH FUNCTION
    ============================================================ */
 const hashPassword = (password) => {
@@ -236,7 +55,6 @@ const hashPassword = (password) => {
 /* ============================================================
    DATABASE CONNECTION (MySQL)
    ============================================================ */
-
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -252,8 +70,8 @@ const pool = mysql.createPool({
 // Session Store Configuration
 const sessionStore = new MySQLStore({
   clearExpired: true,
-  checkExpirationInterval: 900000, // 15 minutes
-  expiration: 86400000, // 1 day
+  checkExpirationInterval: 900000,
+  expiration: 86400000,
   createDatabaseTable: true,
   schema: {
     tableName: 'sessions',
@@ -265,7 +83,6 @@ const sessionStore = new MySQLStore({
   }
 }, pool);
 
-// Check pool connection
 pool.on('error', (err) => {
   console.error('❌ MySQL Pool Error:', err);
 });
@@ -275,27 +92,22 @@ pool.on('connection', (connection) => {
 });
 
 /* ============================================================
-   MIDDLEWARE SETUP - CORRECT ORDER!
+   EXPRESS CONFIGURATION (CORRECT ORDER!)
    ============================================================ */
 
-// 1️⃣ TRUST PROXY (for production behind nginx)
-/* ============================================================
-   MINIMAL FIX - SESSION CONFIGURATION
-   ============================================================ */
-
-// 1️⃣ TRUST PROXY (for production behind nginx/tunnel)
+// 1. Trust proxy
 app.set('trust proxy', 1);
 
-// 2️⃣ BODY PARSER (FIRST)
+// 2. Body parser
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 3️⃣ VIEWS & STATIC
+// 3. Views & Static
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 4️⃣ SESSION (WITH MYSQL STORE - BEFORE ROUTES)
+// 4. Session (ONLY ONCE!)
 app.use(session({
   key: 'monitoring_session',
   secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
@@ -312,7 +124,8 @@ app.use(session({
     path: '/'
   }
 }));
-// 6️⃣ CORS (LAST)
+
+// 5. CORS
 const allowedOrigins = [
   'https://gateway.darsinurse.hint-lab.id',
   'https://darsinurse.hint-lab.id',
@@ -335,21 +148,12 @@ app.use(cors({
 }));
 
 /* ============================================================
-   AUTH MIDDLEWARE (IMPROVED)
+   ✅ AUTH MIDDLEWARE (DEFINE BEFORE ROUTES!)
    ============================================================ */
 const requireLogin = (req, res, next) => {
-  console.log('🔐 Auth check:');
-  console.log('   Path:', req.path);
-  console.log('   Session ID:', req.sessionID?.substring(0, 8) + '...');
-  console.log('   EMR in session:', req.session.emr_perawat);
-  console.log('   Session object:', JSON.stringify(req.session, null, 2));
-  
   if (!req.session || !req.session.emr_perawat) {
-    console.log('❌ No valid session, redirecting to login');
     return res.redirect('/login');
   }
-  
-  console.log('✅ Session valid for:', req.session.nama_perawat);
   next();
 };
 
@@ -374,7 +178,7 @@ const requireAdminOrPerawat = (req, res, next) => {
 };
 
 /* ============================================================
-   METABASE HELPER
+   HELPER FUNCTIONS
    ============================================================ */
 function getMetabaseEmbedUrl(dashboardId, params = {}) {
   const METABASE_URL = process.env.METABASE_URL || 'https://metabase.darsinurse.hint-lab.id';
@@ -391,22 +195,22 @@ function getMetabaseEmbedUrl(dashboardId, params = {}) {
   return `${METABASE_URL}/public/dashboard/${uuid}`;
 }
 
-// LOGIN PAGE (GET)
+/* ============================================================
+   AUTHENTICATION ROUTES
+   ============================================================ */
+
 app.get('/login', (req, res) => {
-  // Kalau sudah login, redirect ke dashboard
   if (req.session && req.session.emr_perawat) {
     return res.redirect('/');
   }
   res.render('monitoring-login', { error: null });
 });
 
-// PROSES LOGIN (POST) - SIMPLE & WORKING
 app.post('/login', async (req, res) => {
   const { emr_perawat, password } = req.body;
   
   console.log('🔐 Login attempt for EMR:', emr_perawat);
   
-  // Validasi input
   if (!emr_perawat || !password) {
     return res.render('monitoring-login', { 
       error: 'EMR Perawat dan Password harus diisi!' 
@@ -423,14 +227,12 @@ app.post('/login', async (req, res) => {
   const hash = hashPassword(password);
   
   try {
-    // Query database
     const [rows] = await pool.query(
       'SELECT * FROM perawat WHERE emr_perawat = ?',
       [emrInt]
     );
 
     if (rows.length === 0) {
-      console.log('❌ User not found');
       return res.render('monitoring-login', { 
         error: 'EMR Perawat tidak ditemukan!' 
       });
@@ -439,27 +241,16 @@ app.post('/login', async (req, res) => {
     const user = rows[0];
     
     if (user.password !== hash) {
-      console.log('❌ Wrong password');
       return res.render('monitoring-login', { 
         error: 'Password salah!' 
       });
     }
 
-    console.log('✅ Credentials valid for:', user.nama);
-
-    // Set session data LANGSUNG (no destroy, no regenerate)
     req.session.emr_perawat = user.emr_perawat;
     req.session.nama_perawat = user.nama;
     req.session.role = user.role;
     req.session.loginTime = new Date().toISOString();
     
-    console.log('📝 Session set:', {
-      sessionID: req.sessionID.substring(0, 8) + '...',
-      emr: user.emr_perawat,
-      nama: user.nama
-    });
-    
-    // Save session
     req.session.save((saveErr) => {
       if (saveErr) {
         console.error('❌ Save error:', saveErr);
@@ -468,7 +259,7 @@ app.post('/login', async (req, res) => {
         });
       }
       
-      console.log('✅ Session saved, redirecting to /');
+      console.log('✅ Session saved for:', user.nama);
       res.redirect('/');
     });
     
@@ -480,26 +271,20 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// LOGOUT
 app.get('/logout', (req, res) => {
   console.log('👋 Logout:', req.session.nama_perawat);
   req.session.destroy((err) => {
-    if (err) {
-      console.error('❌ Logout error:', err);
-    }
+    if (err) console.error('❌ Logout error:', err);
     res.clearCookie('monitoring_session');
     res.redirect('/login');
   });
 });
 
 /* ============================================================
-   ROUTES - MONITORING DASHBOARD
+   DASHBOARD ROUTES
    ============================================================ */
 
-// MAIN MONITORING PAGE
 app.get('/', requireLogin, (req, res) => {
-  console.log('📊 Rendering dashboard for:', req.session.nama_perawat);
-  
   res.render('monitoring-dashboard', {
     nama_perawat: req.session.nama_perawat,
     emr_perawat: req.session.emr_perawat,
@@ -511,7 +296,6 @@ app.get('/', requireLogin, (req, res) => {
    API ENDPOINTS - STATISTICS
    ============================================================ */
 
-// API: Today's Statistics
 app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
   try {
     const conn = await pool.getConnection();
@@ -525,11 +309,11 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
       ? '' 
       : `AND emr_perawat = ${req.session.emr_perawat}`;
     
-    let query = `SELECT COUNT(*) as total FROM kunjungan 
-             WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`;
-    let params = [today, tomorrow];
-
-    const [visits] = await conn.query(query, params);
+    const [visits] = await conn.query(
+      `SELECT COUNT(*) as total FROM kunjungan 
+       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
+      [today, tomorrow]
+    );
     
     const [patients] = await conn.query(
       `SELECT COUNT(DISTINCT emr_no) as total FROM kunjungan 
@@ -566,7 +350,6 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
   }
 });
 
-// API: Today's Visits
 app.get('/api/visits/today', requireAdminOrPerawat, async (req, res) => {
   try {
     const conn = await pool.getConnection();
@@ -601,18 +384,13 @@ app.get('/api/visits/today', requireAdminOrPerawat, async (req, res) => {
     );
     
     conn.release();
-    
-    res.json({
-      success: true,
-      visits: visits
-    });
+    res.json({ success: true, visits });
   } catch (err) {
     console.error('❌ Visits API error:', err);
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
 
-// API: Today's Measurements
 app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
   try {
     const conn = await pool.getConnection();
@@ -628,22 +406,13 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
     
     const [measurements] = await conn.query(
       `SELECT 
-        v.id,
-        v.waktu as timestamp,
-        v.heart_rate,
-        v.sistolik,
-        v.diastolik,
-        v.respirasi,
-        v.glukosa,
-        v.berat_badan_kg,
-        v.tinggi_badan_cm,
-        v.bmi,
-        v.jarak_kasur_cm,
-        v.fall_detected,
-        pas.nama as nama_pasien,
-        pas.emr_no,
-        pr.nama as nama_perawat,
-        k.id_kunjungan
+        v.id, v.waktu as timestamp,
+        v.heart_rate, v.sistolik, v.diastolik,
+        v.respirasi, v.glukosa,
+        v.berat_badan_kg, v.tinggi_badan_cm, v.bmi,
+        v.jarak_kasur_cm, v.fall_detected,
+        pas.nama as nama_pasien, pas.emr_no,
+        pr.nama as nama_perawat, k.id_kunjungan
        FROM vitals v
        JOIN pasien pas ON v.emr_no = pas.emr_no
        LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
@@ -670,22 +439,6 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
         tipe_device.push('Glukosa');
         data.push(`${m.glukosa} mg/dL`);
       }
-      if (m.respirasi) {
-        tipe_device.push('Respirasi');
-        data.push(`${m.respirasi} /min`);
-      }
-      if (m.berat_badan_kg) {
-        tipe_device.push('Berat Badan');
-        data.push(`${m.berat_badan_kg} kg`);
-      }
-      if (m.tinggi_badan_cm) {
-        tipe_device.push('Tinggi Badan');
-        data.push(`${m.tinggi_badan_cm} cm`);
-      }
-      if (m.bmi) {
-        tipe_device.push('BMI');
-        data.push(m.bmi.toFixed(1));
-      }
       if (m.fall_detected) {
         tipe_device.push('🚨 FALL DETECTED');
         data.push('ALERT');
@@ -704,40 +457,109 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
     });
     
     conn.release();
-    
-    res.json({
-      success: true,
-      measurements: formattedMeasurements
-    });
+    res.json({ success: true, measurements: formattedMeasurements });
   } catch (err) {
     console.error('❌ Measurements API error:', err);
     res.status(500).json({ error: 'Database error: ' + err.message });
   }
 });
 
-// API: Metabase Embed Token
-app.get('/api/metabase/rawat-inap-token', requireAdminOrPerawat, (req, res) => {
+/* ============================================================
+   FALL DETECTION API
+   ============================================================ */
+
+app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
   try {
-    const DASHBOARD_ID = 7;
-    const embedUrl = getMetabaseEmbedUrl(DASHBOARD_ID);
+    const conn = await pool.getConnection();
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
-    console.log('✓ Metabase embed URL generated for dashboard:', DASHBOARD_ID);
+    const [falls] = await conn.query(`
+      SELECT 
+        v.id, v.emr_no, v.waktu, v.fall_detected,
+        v.heart_rate, v.sistolik, v.diastolik,
+        p.nama as nama_pasien, p.poli,
+        rd.room_id, rd.device_id
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_no
+      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      WHERE v.fall_detected = 1 AND v.waktu >= ?
+      ORDER BY v.waktu DESC
+      LIMIT 50
+    `, [oneDayAgo]);
     
-    res.json({
-      success: true,
-      embedUrl: embedUrl
+    conn.release();
+    
+    const sessionId = req.sessionID;
+    
+    if (!userDisplayedAlerts.has(sessionId)) {
+      userDisplayedAlerts.set(sessionId, new Set());
+    }
+    
+    const displayedIds = userDisplayedAlerts.get(sessionId);
+    const newFalls = falls.filter(fall => !displayedIds.has(fall.id));
+    
+    res.json({ 
+      success: true, 
+      falls: newFalls,
+      count: newFalls.length,
+      totalToday: falls.length
     });
   } catch (err) {
-    console.error('❌ Metabase token error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Gagal generate Metabase token: ' + err.message 
+    console.error('❌ Fall detection API error:', err);
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+app.post('/api/fall-detection/mark-displayed', requireAdminOrPerawat, (req, res) => {
+  try {
+    const { fallIds } = req.body;
+    
+    if (!Array.isArray(fallIds) || fallIds.length === 0) {
+      return res.status(400).json({ error: 'fallIds must be a non-empty array' });
+    }
+    
+    const sessionId = req.sessionID;
+    
+    if (!userDisplayedAlerts.has(sessionId)) {
+      userDisplayedAlerts.set(sessionId, new Set());
+    }
+    
+    const displayedIds = userDisplayedAlerts.get(sessionId);
+    fallIds.forEach(id => displayedIds.add(parseInt(id)));
+    
+    res.json({ success: true, message: `${fallIds.length} fall(s) marked` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { acknowledged_by } = req.body;
+    
+    res.json({ 
+      success: true, 
+      message: 'Fall alert acknowledged',
+      acknowledged_by,
+      timestamp: new Date()
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/metabase/rawat-inap-token', requireAdminOrPerawat, (req, res) => {
+  try {
+    const embedUrl = getMetabaseEmbedUrl(7);
+    res.json({ success: true, embedUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 /* ============================================================
-   SOCKET.IO - FALL DETECTION
+   SOCKET.IO SETUP
    ============================================================ */
 
 const server = http.createServer(app);
@@ -748,16 +570,7 @@ const io = socketIo(server, {
   }
 });
 
-/* ============================================================
-   SOCKET.IO CLIENT - CONNECT TO RAWAT JALAN SERVER
-   ============================================================ */
-
 const RAWAT_JALAN_URL = process.env.RAWAT_JALAN_URL || 'http://darsinurse-app:4000';
-
-if (!RAWAT_JALAN_URL) {
-  console.error('❌ RAWAT_JALAN_URL tidak dikonfigurasi!');
-  process.exit(1);
-}
 
 const rawajalanSocket = io_client(RAWAT_JALAN_URL, {
   reconnection: true,
@@ -779,41 +592,13 @@ rawajalanSocket.on('connect', () => {
 });
 
 rawajalanSocket.on('disconnect', (reason) => {
-  console.warn('⚠️ Disconnected from Rawat Jalan Server:', reason);
-  io.emit('rawat-jalan-disconnected', {
-    message: 'Fall detection system is offline',
-    timestamp: new Date()
-  });
+  console.warn('⚠️ Disconnected from Rawat Jalan:', reason);
 });
 
-rawajalanSocket.on('connect_error', (error) => {
-  console.error('❌ Connection error to Rawat Jalan:', error.message);
-  
-  io.emit('rawat-jalan-disconnected', {
-    message: 'Fall detection system is offline',
-    error: error.message,
-    timestamp: new Date()
-  });
-});
-
-rawajalanSocket.on('reconnect', (attemptNumber) => {
-  console.log(`✅ Reconnected to Rawat Jalan (attempt ${attemptNumber})`);
-  io.emit('rawat-jalan-connected', {
-    message: 'Fall detection system is active',
-    timestamp: new Date()
-  });
-});
 rawajalanSocket.on('new-fall-alert', (alert) => {
-  console.log('🚨 FALL ALERT from Rawat Jalan Server');
+  if (!alert || !alert.nama_pasien) return;
   
-  if (!alert || !alert.nama_pasien) {
-    console.error('❌ Invalid alert data');
-    return;
-  }
-  
-  // ✅ FIX: Check if already processed
   if (processedFallIds.has(alert.id)) {
-    console.log(`⏭️ [SOCKET] Skipping duplicate: ID ${alert.id}`);
     return;
   }
   
@@ -824,80 +609,36 @@ rawajalanSocket.on('new-fall-alert', (alert) => {
     idsToRemove.forEach(id => processedFallIds.delete(id));
   }
   
-  const validatedAlert = {
-    id: alert.id || crypto.randomUUID(),
-    nama_pasien: alert.nama_pasien,
-    emr_no: alert.emr_no,
-    room_id: alert.room_id,
-    heart_rate: alert.heart_rate,
-    blood_pressure: alert.blood_pressure,
-    waktu: alert.waktu || new Date().toISOString(),
-    fall_confidence: alert.fall_confidence || 0.95
-  };
-  
-  console.log(`🚨 [SOCKET] Broadcasting fall: ${alert.nama_pasien}`);
-  io.to('monitoring-room').emit('fall-alert', validatedAlert);
+  console.log(`🚨 Broadcasting fall: ${alert.nama_pasien}`);
+  io.to('monitoring-room').emit('fall-alert', alert);
 });
-
-rawajalanSocket.on('fall-acknowledged', (data) => {
-  console.log('✅ Fall acknowledged notification received:', data);
-  io.emit('fall-acknowledged-broadcast', data);
-});
-
-/* ============================================================
-   SOCKET.IO SERVER - FOR MONITORING CLIENTS
-   ============================================================ */
 
 io.on('connection', (socket) => {
-  console.log('🔌 Monitoring Client connected:', socket.id);
-  console.log('   Total clients:', io.engine.clientsCount);
+  console.log('🔌 Client connected:', socket.id);
   
   socket.join('monitoring-room');
   
   socket.emit('connection-status', {
-    rawajalanConnected: rawajalanSocket.connected,
-    rawajalanServer: RAWAT_JALAN_URL
+    rawajalanConnected: rawajalanSocket.connected
+  });
+  
+  socket.on('acknowledge-fall', (data) => {
+    rawajalanSocket.emit('fall-acknowledged', {
+      alertId: data.alertId,
+      acknowledgedBy: data.acknowledgedBy,
+      timestamp: new Date().toISOString()
+    });
   });
   
   socket.on('disconnect', () => {
-    console.log('❌ Monitoring Client disconnected:', socket.id);
-    console.log('   Remaining clients:', io.engine.clientsCount);
-  });
-  
-  socket.on('join-monitoring', (data) => {
-    console.log('👀 Monitoring dashboard joined:', data);
-  });
-  
-socket.on('acknowledge-fall', (data) => {
-  console.log('✓ Client acknowledged fall:', data.alertId);
-  
-  rawajalanSocket.emit('fall-acknowledged', {
-    alertId: data.alertId,
-    acknowledgedBy: data.acknowledgedBy || 'Unknown',
-    timestamp: new Date().toISOString()
-  });
-  
-  socket.broadcast.to('monitoring-room').emit('fall-acknowledged-broadcast', {
-    alertId: data.alertId,
-    acknowledgedBy: data.acknowledgedBy
+    console.log('❌ Client disconnected:', socket.id);
   });
 });
 
-  
-  socket.on('check-connection', () => {
-    socket.emit('connection-status', {
-      rawajalanConnected: rawajalanSocket.connected,
-      rawajalanServer: RAWAT_JALAN_URL
-    });
-  });
-});
 /* ============================================================
-   FIXED: AUTO-POLLING FALL DETECTION FROM DATABASE
+   AUTO-POLLING FALL DETECTION
    ============================================================ */
 
-// ✅ FIX: Track processed fall IDs (using Set for O(1) lookup)
-
-// Initialize lastCheckedVitalId
 (async () => {
   try {
     const conn = await pool.getConnection();
@@ -906,61 +647,40 @@ socket.on('acknowledge-fall', (data) => {
     );
     lastCheckedVitalId = result[0].max_id || 0;
     conn.release();
-    console.log(`✓ Fall detection watcher initialized (last ID: ${lastCheckedVitalId})`);
+    console.log(`✓ Fall watcher initialized (last ID: ${lastCheckedVitalId})`);
   } catch (err) {
     console.error('❌ Initialize error:', err.message);
   }
 })();
 
-// ✅ FIX: Main polling function with deduplication
 async function checkFallDetectionFromDatabase() {
   try {
     const conn = await pool.getConnection();
     
     const [falls] = await conn.query(`
       SELECT 
-        v.id,
-        v.emr_no,
-        v.waktu,
-        v.fall_detected,
-        v.heart_rate,
-        v.sistolik,
-        v.diastolik,
-        p.nama as nama_pasien,
-        p.poli,
+        v.id, v.emr_no, v.waktu, v.fall_detected,
+        v.heart_rate, v.sistolik, v.diastolik,
+        p.nama as nama_pasien, p.poli,
         rd.room_id
       FROM vitals v
       LEFT JOIN pasien p ON v.emr_no = p.emr_no
       LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
-      WHERE v.fall_detected = 1 
-      AND v.id > ?
+      WHERE v.fall_detected = 1 AND v.id > ?
       ORDER BY v.id ASC
       LIMIT 20
     `, [lastCheckedVitalId]);
     
     conn.release();
     
-    if (falls.length === 0) {
-      return;
-    }
-    
-    console.log(`🚨 [DB-POLL] ${falls.length} NEW fall(s) detected`);
+    if (falls.length === 0) return;
     
     falls.forEach(fall => {
       lastCheckedVitalId = Math.max(lastCheckedVitalId, fall.id);
       
-      if (processedFallIds.has(fall.id)) {
-        console.log(`⏭️ [DB-POLL] Skipping duplicate: ID ${fall.id}`);
-        return;
-      }
+      if (processedFallIds.has(fall.id)) return;
       
       processedFallIds.add(fall.id);
-      
-      if (processedFallIds.size > PROCESSED_IDS_LIMIT) {
-        const idsToRemove = Array.from(processedFallIds).slice(0, 100);
-        idsToRemove.forEach(id => processedFallIds.delete(id));
-        console.log(`🧹 Cleaned ${idsToRemove.length} old processed IDs`);
-      }
       
       const alertData = {
         id: fall.id,
@@ -973,78 +693,19 @@ async function checkFallDetectionFromDatabase() {
         sistolik: fall.sistolik,
         diastolik: fall.diastolik,
         blood_pressure: fall.sistolik && fall.diastolik 
-          ? `${fall.sistolik}/${fall.diastolik}` 
-          : 'N/A'
+          ? `${fall.sistolik}/${fall.diastolik}` : 'N/A'
       };
       
-      console.log(`🚨 [DB-POLL] Broadcasting fall ID ${fall.id}: ${fall.nama_pasien}`);
       io.to('monitoring-room').emit('fall-alert', alertData);
     });
     
   } catch (err) {
-    console.error('⚠️ [DB-POLL] Error:', err.message);
+    console.error('⚠️ Poll error:', err.message);
   }
 }
 
-let fallCheckIntervalId = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
-console.log(`✓ Fall detection auto-polling started (${FALL_CHECK_INTERVAL/1000}s interval)`);
+const fallCheckIntervalId = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
 
-global.resetFallPolling = () => {
-  processedFallIds.clear();
-  console.log('✓ Fall polling reset - all processed IDs cleared');
-};
-
-/* ============================================================
-   FALL DETECTION API ENDPOINTS
-   ============================================================ */
-
-// Acknowledge fall alert
-app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { acknowledged_by } = req.body;
-    
-    console.log(`✅ Fall ${id} acknowledged by ${acknowledged_by}`);
-    
-    res.json({ 
-      success: true, 
-      message: 'Fall alert acknowledged',
-      acknowledged_by,
-      timestamp: new Date()
-    });
-  } catch (err) {
-    console.error('❌ Acknowledge error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: err.message 
-    });
-  }
-});
-
-// Reset polling (admin only, for debugging)
-app.post('/api/fall-detection/reset-polling', requireAdmin, (req, res) => {
-  try {
-    processedFallIds.clear();
-    
-    if (req.body.resetLastId) {
-      lastCheckedVitalId = 0;
-    }
-    
-    console.log('🔄 Polling reset by admin');
-    
-    res.json({ 
-      success: true, 
-      message: 'Polling reset',
-      processedIdsCleared: true,
-      lastCheckedId: lastCheckedVitalId
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
 /* ============================================================
    START SERVER
    ============================================================ */
@@ -1054,35 +715,16 @@ server.listen(PORT, () => {
 ╔════════════════════════════════════════╗
 ║   DARSINURSE MONITORING SERVER         ║
 ║   Server: http://localhost:${PORT}     ║
-║   Socket.IO Fall Detection: ACTIVE     ║
-║   Session Store: MySQL (Persistent)    ║
-║Environment:                            ║
-║${process.env.NODE_ENV || 'development'}║ 
-║                                        ║
+║   Socket.IO: ACTIVE                    ║
+║   Session: MySQL Persistent            ║
 ╚════════════════════════════════════════╝
 `);
 });
 
 process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received, cleaning up...');
-  if (fallCheckIntervalId) {
-    clearInterval(fallCheckIntervalId);
-  }
+  clearInterval(fallCheckIntervalId);
   rawajalanSocket.disconnect();
-  server.close(() => {
-    process.exit(0);
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT received, cleaning up...');
-  if (fallCheckIntervalId) {
-    clearInterval(fallCheckIntervalId);
-  }
-  rawajalanSocket.disconnect();
-  server.close(() => {
-    process.exit(0);
-  });
+  server.close(() => process.exit(0));
 });
 
 module.exports = { app, server, io };

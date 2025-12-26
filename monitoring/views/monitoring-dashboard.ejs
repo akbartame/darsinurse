@@ -1552,8 +1552,8 @@
         
         // Get role from server-side template (you need to add this in your EJS)
         // For now, default to 'perawat'
-        document.body.dataset.role = 'perawat'; // Change this based on your role logic
         
+        document.body.dataset.role = '<%= role %>';        
         console.log('👤 User:', document.body.dataset.perawat);
         console.log('🔑 Role:', document.body.dataset.role);
         
