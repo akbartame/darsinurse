@@ -795,12 +795,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-            // ============================================
-      // FIXED DASHBOARD SCRIPT - CLIENT SIDE
-      // ============================================
+      /* ============================================================
+        CORRECTED CLIENT-SIDE SCRIPT FOR MONITORING.EJS
+        Ganti semua kode JavaScript di dalam <script> tag
+        ============================================================ */
 
       // ============================================
-      // GLOBAL STATE (FIXED)
+      // GLOBAL STATE
       // ============================================
       let audioUnlocked = false;
       let currentAlertAudio = null;
@@ -808,13 +809,18 @@
       let fallCheckInterval = null;
       let activeAlertsCount = 0;
       let lastPollTime = Date.now();
+      let audioContext = null;
+      let alertAudioBuffer = null;
+      let audioSource = null;
 
-      // ✅ FIX: Generate proper alert sound
+      // ============================================
+      // AUDIO INITIALIZATION
+      // ============================================
       const generateAlertSound = () => {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const duration = 0.5;
-        const sampleRate = audioContext.sampleRate;
-        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const sampleRate = audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, duration * sampleRate, sampleRate);
         const data = buffer.getChannelData(0);
         
         // Generate siren sound (alternating frequencies)
@@ -827,10 +833,6 @@
         return buffer;
       };
 
-      let alertAudioBuffer = null;
-      let audioContext = null;
-      let audioSource = null;
-
       const initializeAudio = () => {
         try {
           audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -842,7 +844,7 @@
       };
 
       // ============================================
-      // SOCKET.IO CONNECTION (FIXED)
+      // SOCKET.IO CONNECTION
       // ============================================
       const socket = io({
         reconnection: true,
@@ -853,8 +855,9 @@
 
       socket.on('connect', () => {
         console.log('✓ Socket.IO connected:', socket.id);
+        const perawat = document.body.dataset.perawat || 'Unknown';
         socket.emit('join-monitoring', { 
-          perawat: document.body.dataset.perawat || 'Unknown',
+          perawat: perawat,
           timestamp: new Date().toISOString() 
         });
       });
@@ -867,9 +870,9 @@
         console.error('❌ Socket connection error:', error.message);
       });
 
-      // ✅ FIX: Single source of truth for fall alerts
+      // ✅ Handle real-time fall alerts from Socket.IO
       socket.on('fall-alert', (alert) => {
-        console.log('🚨 FALL ALERT RECEIVED:', {
+        console.log('🚨 FALL ALERT RECEIVED (Socket.IO):', {
           id: alert.id,
           nama: alert.nama_pasien,
           room: alert.room_id,
@@ -879,6 +882,7 @@
         handleFallAlert(alert);
       });
 
+      // ✅ Handle acknowledgment broadcasts
       socket.on('fall-acknowledged-broadcast', (data) => {
         console.log('✅ Fall acknowledged by another user:', data);
         const alertKey = `fall-${data.alertId}`;
@@ -888,7 +892,7 @@
       });
 
       // ============================================
-      // CENTRALIZED FALL ALERT HANDLER (NEW)
+      // CENTRALIZED FALL ALERT HANDLER
       // ============================================
       function handleFallAlert(alert) {
         if (!alert || !alert.nama_pasien) {
@@ -899,16 +903,15 @@
         const alertKey = `fall-${alert.id}`;
         const now = Date.now();
         
-        // ✅ FIX: Check for duplicates with time window (5 seconds)
+        // ✅ Check for duplicates with time window
         if (displayedAlerts.has(alertKey)) {
           const existing = displayedAlerts.get(alertKey);
           const timeSinceDisplay = now - existing.timestamp;
           
           if (timeSinceDisplay < 5000) {
-            console.log(`⏭️ Duplicate alert ignored: ${alertKey} (${timeSinceDisplay}ms ago)`);
+            console.log(`⏭️ Duplicate alert ignored: ${alertKey}`);
             return;
           } else {
-            console.log(`🔄 Re-displaying old alert: ${alertKey}`);
             displayedAlerts.delete(alertKey);
           }
         }
@@ -919,19 +922,18 @@
           timestamp: now
         });
         
-        // Play audio and show alert
+        // ✅ Play audio and show alert
         playAlertSound();
         showFallAlert(alert);
         
-        // Browser notification
+        // ✅ Browser notification
         if (Notification.permission === 'granted') {
           try {
             const notification = new Notification('🚨 FALL ALERT!', {
               body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
               tag: alertKey,
               requireInteraction: true,
-              vibrate: [200, 100, 200],
-              icon: '/favicon.ico'
+              vibrate: [200, 100, 200]
             });
             
             notification.onclick = () => {
@@ -945,9 +947,12 @@
         
         updateBadgeCount();
         
+        // ✅ Mark as displayed on server
+        markAlertAsDisplayed(alert.id);
+        
         console.log(`✓ Alert displayed: ${alertKey}`);
         
-        // ✅ FIX: Auto-close after 5 minutes
+        // ✅ Auto-close after 5 minutes
         setTimeout(() => {
           const element = document.getElementById(`fall-alert-${alert.id}`);
           if (element && element.parentNode) {
@@ -958,14 +963,35 @@
       }
 
       // ============================================
-      // AUTO-POLLING FROM DATABASE (FIXED)
+      // MARK ALERT AS DISPLAYED ON SERVER
+      // ============================================
+      function markAlertAsDisplayed(fallId) {
+        fetch('/api/fall-detection/mark-displayed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fallIds: [fallId] })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            console.log(`✓ Alert ${fallId} marked as displayed on server`);
+          } else {
+            console.warn('⚠️ Failed to mark as displayed:', data.error);
+          }
+        })
+        .catch(err => {
+          console.error('❌ Mark displayed error:', err);
+        });
+      }
+
+      // ============================================
+      // DATABASE POLLING (BACKUP MECHANISM)
       // ============================================
       function startFallDetectionPolling() {
         if (fallCheckInterval) {
           clearInterval(fallCheckInterval);
         }
         
-        // ✅ FIX: Reasonable polling interval (10 seconds)
         fallCheckInterval = setInterval(async () => {
           const now = Date.now();
           const timeSinceLastPoll = now - lastPollTime;
@@ -978,23 +1004,16 @@
           lastPollTime = now;
           
           try {
-            const res = await fetch('/api/fall-detection/latest', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
-            
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}`);
-            }
+            const res = await fetch('/api/fall-detection/latest');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             
             const data = await res.json();
             
             if (data.success && data.falls && data.falls.length > 0) {
-              console.log(`📊 [POLL] Found ${data.falls.length} fall(s)`);
+              console.log(`📊 [POLL] Found ${data.falls.length} NEW fall(s)`);
+              console.log(`   Total today: ${data.totalToday}`);
+              console.log(`   Already displayed: ${data.displayedCount}`);
               
-              // Process each fall
               data.falls.forEach(fall => {
                 const alertData = {
                   id: fall.id,
@@ -1010,17 +1029,47 @@
                 
                 handleFallAlert(alertData);
               });
+            } else {
+              console.log('📊 [POLL] No new falls');
             }
           } catch (err) {
             console.error('⚠️ [POLL] Error:', err.message);
           }
-        }, 10000); // ✅ 10 seconds instead of 1 second
+        }, 10000); // Poll every 10 seconds
         
         console.log('✓ Fall detection polling started (10s interval)');
       }
 
       // ============================================
-      // SHOW FALL ALERT (FIXED)
+      // RESET DISPLAYED ALERTS (TESTING/ADMIN)
+      // ============================================
+      function resetDisplayedAlerts() {
+        if (confirm('Reset all displayed alerts? This will show old alerts again.')) {
+          fetch('/api/fall-detection/reset-displayed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              console.log('✓ Server-side displayed alerts reset');
+              displayedAlerts.clear();
+              console.log('✓ Client-side displayed alerts cleared');
+              alert(`Reset complete! Cleared ${data.clearedCount} alerts.`);
+              
+              // Force reload
+              location.reload();
+            }
+          })
+          .catch(err => {
+            console.error('❌ Reset error:', err);
+            alert('Failed to reset: ' + err.message);
+          });
+        }
+      }
+
+      // ============================================
+      // SHOW FALL ALERT IN UI
       // ============================================
       function showFallAlert(alert) {
         const container = document.getElementById('fall-alert-container');
@@ -1031,7 +1080,7 @@
         
         const alertId = `fall-alert-${alert.id}`;
         
-        // ✅ FIX: Check if already in DOM
+        // Check if already in DOM
         if (document.getElementById(alertId)) {
           console.log(`⏭️ Alert DOM already exists: ${alertId}`);
           return;
@@ -1106,7 +1155,7 @@
       }
 
       // ============================================
-      // ACKNOWLEDGE & CLOSE (FIXED)
+      // ACKNOWLEDGE & CLOSE ALERTS
       // ============================================
       function acknowledgeFallAlert(alertId) {
         console.log('✓ Acknowledging alert:', alertId);
@@ -1148,10 +1197,10 @@
           alertDiv.remove();
           activeAlertsCount--;
           
-          // ✅ Remove from tracking
+          // Remove from tracking
           displayedAlerts.delete(`fall-${alertId}`);
           
-          // ✅ FIX: Stop audio only if no more alerts
+          // Stop audio only if no more alerts
           if (activeAlertsCount <= 0) {
             activeAlertsCount = 0;
             stopAlertSound();
@@ -1163,7 +1212,7 @@
       }
 
       // ============================================
-      // AUDIO FUNCTIONS (FIXED)
+      // AUDIO FUNCTIONS
       // ============================================
       function playAlertSound() {
         if (!audioContext || !alertAudioBuffer) {
@@ -1172,7 +1221,7 @@
           return;
         }
         
-        // ✅ FIX: Stop existing audio first
+        // Stop existing audio first
         if (audioSource) {
           console.log('🔇 Stopping previous audio');
           stopAlertSound();
@@ -1211,7 +1260,7 @@
       }
 
       // ============================================
-      // BADGE COUNT
+      // BADGE COUNT & TITLE UPDATE
       // ============================================
       function updateBadgeCount() {
         const count = activeAlertsCount;
@@ -1234,7 +1283,9 @@
         console.log(`📊 Active alerts: ${count}`);
       }
 
-      // ✅ FIX: Cleanup old alerts from memory every minute
+      // ============================================
+      // CLEANUP OLD ALERTS FROM MEMORY
+      // ============================================
       setInterval(() => {
         const now = Date.now();
         const fiveMinutesAgo = now - 300000;
@@ -1248,7 +1299,7 @@
         });
         
         if (cleanedCount > 0) {
-          console.log(`🧹 Cleaned up ${cleanedCount} old alert(s)`);
+          console.log(`🧹 Cleaned up ${cleanedCount} old alert(s) from memory`);
         }
       }, 60000);
 
@@ -1277,7 +1328,7 @@
         }
       }
 
-      // ✅ FIX: Multiple event listeners for audio unlock
+      // Multiple event listeners for audio unlock
       ['click', 'keydown', 'touchstart'].forEach(event => {
         document.addEventListener(event, unlockAudio, { once: true });
       });
@@ -1487,15 +1538,24 @@
       }
 
       // ============================================
-      // INITIALIZATION
+      // PAGE INITIALIZATION
       // ============================================
       document.addEventListener('DOMContentLoaded', function() {
         console.log('✓ Page loaded, initializing...');
         
         // Store user info in body dataset
-        const bodyEl = document.body;
-        bodyEl.dataset.perawat = bodyEl.querySelector('[data-perawat]')?.dataset.perawat || 'Unknown';
-        bodyEl.dataset.role = bodyEl.querySelector('[data-role]')?.dataset.role || 'perawat';
+        const navSection = document.querySelector('.nav-section span');
+        if (navSection && navSection.textContent) {
+          const perawatName = navSection.textContent.replace(/\s*<.*?>\s*/g, '').trim();
+          document.body.dataset.perawat = perawatName;
+        }
+        
+        // Get role from server-side template (you need to add this in your EJS)
+        // For now, default to 'perawat'
+        document.body.dataset.role = 'perawat'; // Change this based on your role logic
+        
+        console.log('👤 User:', document.body.dataset.perawat);
+        console.log('🔑 Role:', document.body.dataset.role);
         
         // Request notification permission
         if ("Notification" in window && Notification.permission === "default") {
@@ -1521,6 +1581,7 @@
         loadRawatJalanData();
         
         console.log('✓ Dashboard initialized');
+        console.log('✓ Fall detection system ready');
       });
 
       // ============================================

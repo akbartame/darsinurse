@@ -22,6 +22,209 @@ let lastCheckedVitalId = 0;
 const FALL_CHECK_INTERVAL = 10000; // ✅ FIX: 10 seconds instead of 1 second
 const PROCESSED_IDS_LIMIT = 1000; // ✅ Limit memory usage
 
+/* ============================================================
+   FIXED: SESSION-BASED FALL ALERT TRACKING
+   Tambahkan di server.js monitoring setelah deklarasi variabel global
+   ============================================================ */
+
+// ✅ ADD: Track displayed alerts per user session
+const userDisplayedAlerts = new Map(); // sessionID -> Set of fall IDs
+const SESSION_CLEANUP_INTERVAL = 3600000; // 1 hour
+
+// ✅ Cleanup old sessions periodically
+setInterval(() => {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  userDisplayedAlerts.forEach((alertSet, sessionId) => {
+    // Check if session still exists (simple heuristic: size check)
+    if (alertSet.size > 1000) { // If too many alerts tracked, clean it
+      userDisplayedAlerts.delete(sessionId);
+      cleanedCount++;
+    }
+  });
+  
+  if (cleanedCount > 0) {
+    console.log(`🧹 Cleaned ${cleanedCount} old session alert tracking`);
+  }
+}, SESSION_CLEANUP_INTERVAL);
+
+/* ============================================================
+   FIXED: FALL DETECTION API WITH SESSION TRACKING
+   GANTI endpoint /api/fall-detection/latest yang lama
+   ============================================================ */
+
+app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    
+    const [falls] = await conn.query(`
+      SELECT 
+        v.id,
+        v.emr_no,
+        v.waktu,
+        v.fall_detected,
+        v.heart_rate,
+        v.sistolik,
+        v.diastolik,
+        p.nama as nama_pasien,
+        p.poli,
+        rd.room_id,
+        rd.device_id
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_no
+      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      WHERE v.fall_detected = 1 
+      AND v.waktu >= ?
+      ORDER BY v.waktu DESC
+      LIMIT 50
+    `, [oneDayAgo]);
+    
+    conn.release();
+    
+    // ✅ GET session ID
+    const sessionId = req.sessionID;
+    
+    // ✅ GET or CREATE set of displayed alerts for this session
+    if (!userDisplayedAlerts.has(sessionId)) {
+      userDisplayedAlerts.set(sessionId, new Set());
+    }
+    
+    const displayedIds = userDisplayedAlerts.get(sessionId);
+    
+    // ✅ FILTER: Only return falls NOT yet displayed to this user
+    const newFalls = falls.filter(fall => !displayedIds.has(fall.id));
+    
+    console.log(`📊 [${req.session.nama_perawat}] Fall detection check:`);
+    console.log(`   Total falls (24h): ${falls.length}`);
+    console.log(`   Already displayed: ${displayedIds.size}`);
+    console.log(`   New falls: ${newFalls.length}`);
+    
+    res.json({ 
+      success: true, 
+      falls: newFalls,
+      count: newFalls.length,
+      totalToday: falls.length,
+      displayedCount: displayedIds.size,
+      lastCheckedId: lastCheckedVitalId
+    });
+  } catch (err) {
+    console.error('❌ Fall detection API error:', err);
+    res.status(500).json({ 
+      success: false,
+      error: 'Database error: ' + err.message 
+    });
+  }
+});
+
+/* ============================================================
+   NEW ENDPOINT: Mark Falls as Displayed
+   ============================================================ */
+
+app.post('/api/fall-detection/mark-displayed', requireAdminOrPerawat, (req, res) => {
+  try {
+    const { fallIds } = req.body;
+    
+    if (!Array.isArray(fallIds) || fallIds.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'fallIds must be a non-empty array' 
+      });
+    }
+    
+    const sessionId = req.sessionID;
+    
+    // Get or create set for this session
+    if (!userDisplayedAlerts.has(sessionId)) {
+      userDisplayedAlerts.set(sessionId, new Set());
+    }
+    
+    const displayedIds = userDisplayedAlerts.get(sessionId);
+    
+    // Mark all as displayed
+    fallIds.forEach(id => {
+      displayedIds.add(parseInt(id));
+    });
+    
+    console.log(`✓ [${req.session.nama_perawat}] Marked ${fallIds.length} fall(s) as displayed`);
+    console.log(`   Session total displayed: ${displayedIds.size}`);
+    
+    res.json({ 
+      success: true, 
+      message: `${fallIds.length} fall alert(s) marked as displayed`,
+      totalDisplayed: displayedIds.size
+    });
+  } catch (err) {
+    console.error('❌ Mark displayed error:', err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
+});
+
+/* ============================================================
+   NEW ENDPOINT: Reset Displayed Alerts (for testing/admin)
+   ============================================================ */
+
+app.post('/api/fall-detection/reset-displayed', requireAdminOrPerawat, (req, res) => {
+  try {
+    const sessionId = req.sessionID;
+    
+    if (userDisplayedAlerts.has(sessionId)) {
+      const count = userDisplayedAlerts.get(sessionId).size;
+      userDisplayedAlerts.delete(sessionId);
+      
+      console.log(`🔄 [${req.session.nama_perawat}] Reset ${count} displayed alerts`);
+      
+      res.json({ 
+        success: true, 
+        message: `Reset ${count} displayed alerts`,
+        clearedCount: count
+      });
+    } else {
+      res.json({ 
+        success: true, 
+        message: 'No displayed alerts to reset',
+        clearedCount: 0
+      });
+    }
+  } catch (err) {
+    console.error('❌ Reset displayed error:', err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
+});
+
+/* ============================================================
+   UPDATED: Get Statistics (include session info)
+   ============================================================ */
+
+app.get('/api/fall-detection/stats', requireAdmin, (req, res) => {
+  const sessionId = req.sessionID;
+  const myDisplayedCount = userDisplayedAlerts.has(sessionId) 
+    ? userDisplayedAlerts.get(sessionId).size 
+    : 0;
+  
+  res.json({
+    success: true,
+    stats: {
+      lastCheckedVitalId,
+      processedFallsCount: processedFallIds.size,
+      pollingInterval: FALL_CHECK_INTERVAL,
+      rawajalanConnected: rawajalanSocket.connected,
+      connectedClients: io.engine.clientsCount,
+      // ✅ NEW: Session tracking stats
+      activeSessions: userDisplayedAlerts.size,
+      myDisplayedAlerts: myDisplayedCount,
+      totalTrackedAlerts: Array.from(userDisplayedAlerts.values())
+        .reduce((sum, set) => sum + set.size, 0)
+    }
+  });
+});
 
 /* ============================================================
    HASH FUNCTION
@@ -795,51 +998,6 @@ global.resetFallPolling = () => {
    FALL DETECTION API ENDPOINTS
    ============================================================ */
 
-// Get latest falls (last 24 hours)
-app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
-  try {
-    const conn = await pool.getConnection();
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    const [falls] = await conn.query(`
-      SELECT 
-        v.id,
-        v.emr_no,
-        v.waktu,
-        v.fall_detected,
-        v.heart_rate,
-        v.sistolik,
-        v.diastolik,
-        p.nama as nama_pasien,
-        p.poli,
-        rd.room_id,
-        rd.device_id
-      FROM vitals v
-      LEFT JOIN pasien p ON v.emr_no = p.emr_no
-      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
-      WHERE v.fall_detected = 1 
-      AND v.waktu >= ?
-      ORDER BY v.waktu DESC
-      LIMIT 50
-    `, [oneDayAgo]);
-    
-    conn.release();
-    
-    res.json({ 
-      success: true, 
-      falls,
-      count: falls.length,
-      lastCheckedId: lastCheckedVitalId
-    });
-  } catch (err) {
-    console.error('❌ Fall detection API error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Database error: ' + err.message 
-    });
-  }
-});
-
 // Acknowledge fall alert
 app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (req, res) => {
   try {
@@ -886,20 +1044,6 @@ app.post('/api/fall-detection/reset-polling', requireAdmin, (req, res) => {
       error: err.message
     });
   }
-});
-
-// Get polling statistics (admin only, for monitoring)
-app.get('/api/fall-detection/stats', requireAdmin, (req, res) => {
-  res.json({
-    success: true,
-    stats: {
-      lastCheckedVitalId,
-      processedFallsCount: processedFallIds.size,
-      pollingInterval: FALL_CHECK_INTERVAL,
-      rawajalanConnected: rawajalanSocket.connected,
-      connectedClients: io.engine.clientsCount
-    }
-  });
 });
 /* ============================================================
    START SERVER
