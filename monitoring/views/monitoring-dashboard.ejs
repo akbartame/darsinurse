@@ -795,29 +795,66 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-      // ============================================
-      // COMPLETE FIXED DASHBOARD SCRIPT
+            // ============================================
+      // FIXED DASHBOARD SCRIPT - CLIENT SIDE
       // ============================================
 
       // ============================================
-      // GLOBAL STATE
+      // GLOBAL STATE (FIXED)
       // ============================================
       let audioUnlocked = false;
       let currentAlertAudio = null;
-      const displayedAlerts = new Map(); // ✅ Ganti Set jadi Map untuk tracking detail
+      const displayedAlerts = new Map(); // Track with timestamp
       let fallCheckInterval = null;
       let activeAlertsCount = 0;
+      let lastPollTime = Date.now();
 
+      // ✅ FIX: Generate proper alert sound
+      const generateAlertSound = () => {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const duration = 0.5;
+        const sampleRate = audioContext.sampleRate;
+        const buffer = audioContext.createBuffer(1, duration * sampleRate, sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        // Generate siren sound (alternating frequencies)
+        for (let i = 0; i < buffer.length; i++) {
+          const t = i / sampleRate;
+          const freq = Math.sin(t * 8) * 200 + 800; // Oscillate between 600-1000 Hz
+          data[i] = Math.sin(2 * Math.PI * freq * t) * 0.3;
+        }
+        
+        return buffer;
+      };
+
+      let alertAudioBuffer = null;
+      let audioContext = null;
+      let audioSource = null;
+
+      const initializeAudio = () => {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          alertAudioBuffer = generateAlertSound();
+          console.log('✓ Alert audio initialized');
+        } catch (err) {
+          console.error('❌ Audio init failed:', err);
+        }
+      };
+
+      // ============================================
+      // SOCKET.IO CONNECTION (FIXED)
+      // ============================================
       const socket = io({
         reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionDelay: 2000,
+        reconnectionAttempts: 10,
+        timeout: 10000
       });
 
       socket.on('connect', () => {
         console.log('✓ Socket.IO connected:', socket.id);
         socket.emit('join-monitoring', { 
-          perawat: '<%= nama_perawat %>',
+          perawat: document.body.dataset.perawat || 'Unknown',
           timestamp: new Date().toISOString() 
         });
       });
@@ -827,10 +864,10 @@
       });
 
       socket.on('connect_error', (error) => {
-        console.error('❌ Socket connection error:', error);
-        setTimeout(() => socket.connect(), 3000);
+        console.error('❌ Socket connection error:', error.message);
       });
 
+      // ✅ FIX: Single source of truth for fall alerts
       socket.on('fall-alert', (alert) => {
         console.log('🚨 FALL ALERT RECEIVED:', {
           id: alert.id,
@@ -839,75 +876,126 @@
           time: alert.waktu
         });
         
+        handleFallAlert(alert);
+      });
+
+      socket.on('fall-acknowledged-broadcast', (data) => {
+        console.log('✅ Fall acknowledged by another user:', data);
+        const alertKey = `fall-${data.alertId}`;
+        if (displayedAlerts.has(alertKey)) {
+          closeFallAlert(data.alertId, false); // Close without sending acknowledge again
+        }
+      });
+
+      // ============================================
+      // CENTRALIZED FALL ALERT HANDLER (NEW)
+      // ============================================
+      function handleFallAlert(alert) {
         if (!alert || !alert.nama_pasien) {
           console.error('❌ Invalid alert data');
           return;
         }
         
         const alertKey = `fall-${alert.id}`;
+        const now = Date.now();
         
-        // ✅ FIX: Cek duplikasi dengan detail
+        // ✅ FIX: Check for duplicates with time window (5 seconds)
         if (displayedAlerts.has(alertKey)) {
           const existing = displayedAlerts.get(alertKey);
-          console.log(`⏭️ Alert sudah ada: ${alertKey} (displayed at ${existing.displayTime})`);
-          return;
+          const timeSinceDisplay = now - existing.timestamp;
+          
+          if (timeSinceDisplay < 5000) {
+            console.log(`⏭️ Duplicate alert ignored: ${alertKey} (${timeSinceDisplay}ms ago)`);
+            return;
+          } else {
+            console.log(`🔄 Re-displaying old alert: ${alertKey}`);
+            displayedAlerts.delete(alertKey);
+          }
         }
         
-        // ✅ FIX: Simpan dengan timestamp
+        // ✅ Store with timestamp
         displayedAlerts.set(alertKey, {
           alert: alert,
-          displayTime: new Date().toISOString()
+          timestamp: now
         });
         
+        // Play audio and show alert
         playAlertSound();
         showFallAlert(alert);
         
         // Browser notification
         if (Notification.permission === 'granted') {
-          const notification = new Notification('🚨 FALL ALERT!', {
-            body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
-            tag: alertKey,
-            requireInteraction: true,
-            vibrate: [200, 100, 200]
-          });
-          
-          notification.onclick = () => {
-            window.focus();
-            notification.close();
-          };
+          try {
+            const notification = new Notification('🚨 FALL ALERT!', {
+              body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
+              tag: alertKey,
+              requireInteraction: true,
+              vibrate: [200, 100, 200],
+              icon: '/favicon.ico'
+            });
+            
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
+          } catch (err) {
+            console.error('❌ Notification error:', err);
+          }
         }
         
         updateBadgeCount();
         
         console.log(`✓ Alert displayed: ${alertKey}`);
-      });
+        
+        // ✅ FIX: Auto-close after 5 minutes
+        setTimeout(() => {
+          const element = document.getElementById(`fall-alert-${alert.id}`);
+          if (element && element.parentNode) {
+            console.log('⏱️ Auto-closing alert:', alert.id);
+            closeFallAlert(alert.id, false);
+          }
+        }, 300000);
+      }
 
-      /* ============================================
-        AUTO-POLLING FROM DATABASE (FIXED)
-        ============================================ */
-
+      // ============================================
+      // AUTO-POLLING FROM DATABASE (FIXED)
+      // ============================================
       function startFallDetectionPolling() {
         if (fallCheckInterval) {
           clearInterval(fallCheckInterval);
         }
         
-        // ✅ FIX: Polling lebih cepat (5 detik)
+        // ✅ FIX: Reasonable polling interval (10 seconds)
         fallCheckInterval = setInterval(async () => {
+          const now = Date.now();
+          const timeSinceLastPoll = now - lastPollTime;
+          
+          // Skip if too soon
+          if (timeSinceLastPoll < 9000) {
+            return;
+          }
+          
+          lastPollTime = now;
+          
           try {
-            const res = await fetch('/api/fall-detection/latest');
+            const res = await fetch('/api/fall-detection/latest', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`);
+            }
+            
             const data = await res.json();
             
-            if (data.success && data.falls) {
+            if (data.success && data.falls && data.falls.length > 0) {
+              console.log(`📊 [POLL] Found ${data.falls.length} fall(s)`);
+              
+              // Process each fall
               data.falls.forEach(fall => {
-                const alertKey = `fall-${fall.id}`;
-                
-                // ✅ FIX: Skip jika sudah ada
-                if (displayedAlerts.has(alertKey)) {
-                  return;
-                }
-                
-                console.log('📊 [POLL] New fall:', fall.nama_pasien);
-                
                 const alertData = {
                   id: fall.id,
                   emr_no: fall.emr_no,
@@ -920,37 +1008,20 @@
                   waktu: fall.waktu
                 };
                 
-                displayedAlerts.set(alertKey, {
-                  alert: alertData,
-                  displayTime: new Date().toISOString()
-                });
-                
-                playAlertSound();
-                showFallAlert(alertData);
-                
-                if (Notification.permission === 'granted') {
-                  new Notification('🚨 FALL DETECTED', {
-                    body: `${alertData.nama_pasien} - ${alertData.room_id}`,
-                    tag: alertKey,
-                    requireInteraction: true
-                  });
-                }
-                
-                updateBadgeCount();
+                handleFallAlert(alertData);
               });
             }
           } catch (err) {
             console.error('⚠️ [POLL] Error:', err.message);
           }
-        }, 2000); // ✅ 5 detik
+        }, 10000); // ✅ 10 seconds instead of 1 second
         
-        console.log('✓ Fall detection polling started (5s interval)');
+        console.log('✓ Fall detection polling started (10s interval)');
       }
 
-      /* ============================================
-        SHOW FALL ALERT (FIXED)
-        ============================================ */
-
+      // ============================================
+      // SHOW FALL ALERT (FIXED)
+      // ============================================
       function showFallAlert(alert) {
         const container = document.getElementById('fall-alert-container');
         if (!container) {
@@ -960,7 +1031,7 @@
         
         const alertId = `fall-alert-${alert.id}`;
         
-        // ✅ FIX: Cek jika alert sudah ditampilkan di DOM
+        // ✅ FIX: Check if already in DOM
         if (document.getElementById(alertId)) {
           console.log(`⏭️ Alert DOM already exists: ${alertId}`);
           return;
@@ -1019,7 +1090,7 @@
             <button class="fall-alert-btn btn-acknowledge" onclick="acknowledgeFallAlert(${alert.id})">
               ✓ Acknowledge
             </button>
-            <button class="fall-alert-btn btn-close" onclick="closeFallAlert(${alert.id})">
+            <button class="fall-alert-btn btn-close" onclick="closeFallAlert(${alert.id}, false)">
               ✕ Close
             </button>
           </div>
@@ -1031,37 +1102,40 @@
         
         container.insertBefore(alertDiv, container.firstChild);
         activeAlertsCount++;
-        
-        // ✅ FIX: Auto-close setelah 5 menit
-        setTimeout(() => {
-          const element = document.getElementById(alertId);
-          if (element && element.parentNode) {
-            console.log('⏱️ Auto-closing alert:', alert.id);
-            closeFallAlert(alert.id);
-          }
-        }, 300000);
+        updateBadgeCount();
       }
 
-      /* ============================================
-        ACKNOWLEDGE & CLOSE (FIXED)
-        ============================================ */
-
+      // ============================================
+      // ACKNOWLEDGE & CLOSE (FIXED)
+      // ============================================
       function acknowledgeFallAlert(alertId) {
         console.log('✓ Acknowledging alert:', alertId);
+        
+        const perawat = document.body.dataset.perawat || 'Unknown';
         
         fetch(`/api/fall-detection/${alertId}/acknowledge`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            acknowledged_by: '<%= nama_perawat %>',
+            acknowledged_by: perawat,
             timestamp: new Date().toISOString()
           })
-        }).catch(err => console.error('❌ Acknowledge error:', err));
+        })
+        .then(res => res.json())
+        .then(data => {
+          console.log('✓ Acknowledged:', data);
+          // Emit to socket so other clients know
+          socket.emit('acknowledge-fall', {
+            alertId: alertId,
+            acknowledgedBy: perawat
+          });
+        })
+        .catch(err => console.error('❌ Acknowledge error:', err));
         
-        closeFallAlert(alertId);
+        closeFallAlert(alertId, true);
       }
 
-      function closeFallAlert(alertId) {
+      function closeFallAlert(alertId, sendAcknowledge = false) {
         const alertDiv = document.getElementById(`fall-alert-${alertId}`);
         if (!alertDiv) {
           console.log(`ℹ️ Alert ${alertId} already closed`);
@@ -1074,10 +1148,10 @@
           alertDiv.remove();
           activeAlertsCount--;
           
-          // ✅ FIX: Hapus dari tracking
+          // ✅ Remove from tracking
           displayedAlerts.delete(`fall-${alertId}`);
           
-          // ✅ FIX: Stop audio jika tidak ada alert lagi
+          // ✅ FIX: Stop audio only if no more alerts
           if (activeAlertsCount <= 0) {
             activeAlertsCount = 0;
             stopAlertSound();
@@ -1088,58 +1162,57 @@
         }, 300);
       }
 
-      /* ============================================
-        AUDIO FUNCTIONS (FIXED)
-        ============================================ */
-
+      // ============================================
+      // AUDIO FUNCTIONS (FIXED)
+      // ============================================
       function playAlertSound() {
-        const audio = document.getElementById('fall-alert-sound');
-        if (!audio || !audio.src) {
-          console.warn('⚠️ No audio source');
+        if (!audioContext || !alertAudioBuffer) {
+          console.warn('⚠️ Audio not initialized');
+          initializeAudio();
           return;
         }
-
-        // ✅ FIX: Jika sudah playing, jangan play lagi
-        if (currentAlertAudio && !currentAlertAudio.paused) {
-          console.log('🔊 Audio already playing');
-          return;
-        }
-
-        currentAlertAudio = audio;
-        audio.loop = true;
         
-        audio.play()
-          .then(() => {
-            console.log('🔊 Alert sound playing (looping)');
-          })
-          .catch(err => {
-            console.warn('⚠️ Audio play failed:', err.message);
-            
-            // Retry on user interaction
-            const retryPlay = () => {
-              audio.play().then(() => {
-                console.log('✓ Alert sound now playing');
-              });
-              document.removeEventListener('click', retryPlay);
-            };
-            
-            document.addEventListener('click', retryPlay, { once: true });
-          });
+        // ✅ FIX: Stop existing audio first
+        if (audioSource) {
+          console.log('🔇 Stopping previous audio');
+          stopAlertSound();
+        }
+        
+        try {
+          // Resume context if suspended
+          if (audioContext.state === 'suspended') {
+            audioContext.resume();
+          }
+          
+          // Create and start source
+          audioSource = audioContext.createBufferSource();
+          audioSource.buffer = alertAudioBuffer;
+          audioSource.loop = true; // Loop the sound
+          audioSource.connect(audioContext.destination);
+          audioSource.start(0);
+          
+          console.log('🔊 Alert sound playing (looping)');
+        } catch (err) {
+          console.error('❌ Audio play error:', err);
+        }
       }
 
       function stopAlertSound() {
-        if (currentAlertAudio) {
-          currentAlertAudio.pause();
-          currentAlertAudio.currentTime = 0;
-          currentAlertAudio.loop = false;
-          currentAlertAudio = null;
+        if (audioSource) {
+          try {
+            audioSource.stop();
+            audioSource.disconnect();
+          } catch (err) {
+            console.warn('⚠️ Audio stop error:', err);
+          }
+          audioSource = null;
           console.log('🔇 Alert sound stopped');
         }
       }
-      /* ============================================
-        BADGE COUNT (FIXED)
-        ============================================ */
 
+      // ============================================
+      // BADGE COUNT
+      // ============================================
       function updateBadgeCount() {
         const count = activeAlertsCount;
         
@@ -1151,44 +1224,69 @@
           }
         }
         
+        // Update document title
+        if (count > 0) {
+          document.title = `(${count}) 🚨 Fall Alert - Darsinurse`;
+        } else {
+          document.title = 'Darsinurse - Dashboard Monitoring';
+        }
+        
         console.log(`📊 Active alerts: ${count}`);
       }
+
+      // ✅ FIX: Cleanup old alerts from memory every minute
       setInterval(() => {
         const now = Date.now();
         const fiveMinutesAgo = now - 300000;
         
+        let cleanedCount = 0;
         displayedAlerts.forEach((value, key) => {
-          const displayTime = new Date(value.displayTime).getTime();
-          
-          if (displayTime < fiveMinutesAgo) {
+          if (value.timestamp < fiveMinutesAgo) {
             displayedAlerts.delete(key);
-            console.log(`🧹 Cleaned up old alert: ${key}`);
+            cleanedCount++;
           }
         });
-      }, 60000); // Cleanup setiap 1 menit
+        
+        if (cleanedCount > 0) {
+          console.log(`🧹 Cleaned up ${cleanedCount} old alert(s)`);
+        }
+      }, 60000);
+
+      // ============================================
+      // AUDIO UNLOCK
+      // ============================================
       function unlockAudio() {
         if (audioUnlocked) return;
-
-        const audio = document.getElementById('fall-alert-sound');
-        if (audio && audio.src) {
-          audio.play()
-            .then(() => {
-              audio.pause();
-              audio.currentTime = 0;
-              audioUnlocked = true;
-              console.log('✓ Alert sounds enabled');
-            })
-            .catch(err => {
-              console.warn('⚠️ Audio unlock failed:', err.message);
-            });
+        
+        initializeAudio();
+        
+        if (audioContext) {
+          audioContext.resume().then(() => {
+            audioUnlocked = true;
+            console.log('✓ Alert sounds enabled');
+            
+            // Remove banner if exists
+            const banner = document.getElementById('audio-unlock-banner');
+            if (banner) {
+              banner.style.animation = 'slideUp 0.3s ease-in';
+              setTimeout(() => banner.remove(), 300);
+            }
+          }).catch(err => {
+            console.warn('⚠️ Audio unlock failed:', err);
+          });
         }
       }
 
-      ['click', 'keydown', 'touchstart', 'mousedown'].forEach(event => {
+      // ✅ FIX: Multiple event listeners for audio unlock
+      ['click', 'keydown', 'touchstart'].forEach(event => {
         document.addEventListener(event, unlockAudio, { once: true });
       });
 
       function showAudioUnlockBanner() {
+        if (document.getElementById('audio-unlock-banner')) {
+          return; // Already showing
+        }
+        
         const banner = document.createElement('div');
         banner.id = 'audio-unlock-banner';
         banner.style.cssText = `
@@ -1198,8 +1296,8 @@
           transform: translateX(-50%);
           background: #ff9800;
           color: white;
-          padding: 10px 20px;
-          border-radius: 6px;
+          padding: 12px 24px;
+          border-radius: 8px;
           z-index: 9998;
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
           font-size: 14px;
@@ -1212,34 +1310,17 @@
         banner.onclick = (e) => {
           e.stopPropagation();
           unlockAudio();
-          removeBanner();
         };
         
         document.body.appendChild(banner);
         
-        const globalUnlock = () => {
-          if (!audioUnlocked) {
-            unlockAudio();
-            removeBanner();
-            document.removeEventListener('click', globalUnlock);
-          }
-        };
-        
+        // Auto-remove after 10 seconds
         setTimeout(() => {
-          document.addEventListener('click', globalUnlock);
-        }, 200);
-        
-        setTimeout(() => {
-          if (banner.parentNode) {
-            removeBanner();
-            document.removeEventListener('click', globalUnlock);
+          if (banner.parentNode && !audioUnlocked) {
+            banner.style.animation = 'slideUp 0.3s ease-in';
+            setTimeout(() => banner.remove(), 300);
           }
         }, 10000);
-        
-        function removeBanner() {
-          banner.style.animation = 'slideUp 0.3s ease-in';
-          setTimeout(() => banner.remove(), 300);
-        }
       }
 
       // ============================================
@@ -1273,56 +1354,40 @@
           const statsResponse = await fetch('/api/statistics/today');
           const statsData = await statsResponse.json();
           
-          console.log('📊 Stats data:', statsData);
-          
           if (statsData.success) {
             const totalVisitsEl = document.getElementById('total-visits');
             const totalMeasurementsEl = document.getElementById('total-measurements');
             
             if (totalVisitsEl) {
               totalVisitsEl.textContent = statsData.stats.totalVisits || 0;
-              console.log('✓ Total visits updated:', statsData.stats.totalVisits);
             }
             
             if (totalMeasurementsEl) {
               totalMeasurementsEl.textContent = statsData.stats.totalMeasurements || 0;
-              console.log('✓ Total measurements updated:', statsData.stats.totalMeasurements);
             }
           }
 
           await loadVisitsData();
           await loadMeasurementsData();
 
-          console.log('✓ Rawat Jalan data loaded successfully');
+          console.log('✓ Rawat Jalan data loaded');
         } catch (err) {
           console.error('❌ Error loading data:', err);
-          alert('Gagal memuat data: ' + err.message);
         }
       }
 
-      // ============================================
-      // LOAD VISITS TABLE
-      // ============================================
       async function loadVisitsData() {
         try {
-          console.log('🔄 Loading visits...');
-          
           const visitsResponse = await fetch('/api/visits/today');
           const visitsData = await visitsResponse.json();
-          
-          console.log('📋 Visits data:', visitsData);
           
           if (visitsData.success) {
             const tbody = document.getElementById('visits-table-body');
             
-            if (!tbody) {
-              console.error('❌ Element #visits-table-body not found');
-              return;
-            }
+            if (!tbody) return;
             
             if (visitsData.visits.length === 0) {
               tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada data kunjungan hari ini</td></tr>';
-              console.log('ℹ️ No visits today');
             } else {
               tbody.innerHTML = visitsData.visits.map(visit => `
                 <tr>
@@ -1335,44 +1400,28 @@
                   <td><span class="badge bg-info">${visit.total_measurements} data</span></td>
                 </tr>
               `).join('');
-              console.log('✓ Visits table updated with', visitsData.visits.length, 'records');
             }
           }
         } catch (err) {
           console.error('❌ Error loading visits:', err);
-          const tbody = document.getElementById('visits-table-body');
-          if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error: ' + err.message + '</td></tr>';
-          }
         }
       }
 
-      // ============================================
-      // LOAD MEASUREMENTS TABLE
-      // ============================================
       async function loadMeasurementsData() {
         try {
-          console.log('🔄 Loading measurements...');
-          
           const measurementsResponse = await fetch('/api/measurements/today');
           const measurementsData = await measurementsResponse.json();
-          
-          console.log('💉 Measurements data:', measurementsData);
           
           if (measurementsData.success) {
             const tbody = document.getElementById('measurements-table-body');
             
-            if (!tbody) {
-              console.error('❌ Element #measurements-table-body not found');
-              return;
-            }
+            if (!tbody) return;
             
-            const isAdmin = '<%= role %>' === 'admin';
+            const isAdmin = document.body.dataset.role === 'admin';
             const colspan = isAdmin ? '5' : '4';
             
             if (measurementsData.measurements.length === 0) {
               tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4">Tidak ada pengukuran hari ini</td></tr>`;
-              console.log('ℹ️ No measurements today');
             } else {
               tbody.innerHTML = measurementsData.measurements.map(m => {
                 const perawatColumn = isAdmin ? `<td>${m.nama_perawat}</td>` : '';
@@ -1386,99 +1435,49 @@
                   </tr>
                 `;
               }).join('');
-              console.log('✓ Measurements table updated with', measurementsData.measurements.length, 'records');
             }
           }
         } catch (err) {
           console.error('❌ Error loading measurements:', err);
-          const tbody = document.getElementById('measurements-table-body');
-          if (tbody) {
-            const colspan = '<%= role %>' === 'admin' ? '5' : '4';
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-danger py-4">Error: ${err.message}</td></tr>`;
-          }
         }
       }
 
-      // ============================================
-      // METABASE DASHBOARD LOADING
-      // ============================================
       async function loadMetabaseDashboard() {
         const loadingDiv = document.getElementById('metabase-loading');
         const iframe = document.getElementById('metabase-iframe');
         
-        if (!loadingDiv || !iframe) {
-          console.error('❌ Elements not found');
-          return;
-        }
+        if (!loadingDiv || !iframe) return;
         
         loadingDiv.style.display = 'flex';
-        loadingDiv.style.opacity = '1';
-        loadingDiv.style.transition = 'opacity 0.3s ease';
         iframe.style.display = 'none';
         
         try {
-          console.log('🔄 Loading Metabase...');
-          
           const response = await fetch('/api/metabase/rawat-inap-token');
           const data = await response.json();
-          
-          console.log('📊 API Response:', data);
           
           if (data.success && data.embedUrl) {
             iframe.src = data.embedUrl;
             
             iframe.onload = function() {
-              console.log('✓ Iframe loaded');
-              
-              loadingDiv.style.opacity = '0';
-              
               setTimeout(() => {
                 loadingDiv.style.display = 'none';
                 iframe.style.display = 'block';
-                iframe.style.opacity = '0';
-                iframe.style.transition = 'opacity 0.3s ease';
-                
-                requestAnimationFrame(() => {
-                  iframe.style.opacity = '1';
-                });
               }, 300);
             };
             
-            iframe.onerror = function() {
-              console.error('❌ Iframe failed to load');
-              loadingDiv.innerHTML = `
-                <div style="text-align: center; color: #dc3545;">
-                  <i class="fas fa-exclamation-triangle" style="font-size: 48px;"></i>
-                  <p style="margin-top: 15px;"><strong>Gagal memuat dashboard</strong></p>
-                  <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary mt-3">
-                    <i class="fas fa-sync"></i> Coba Lagi
-                  </button>
-                </div>
-              `;
-            };
-            
             setTimeout(() => {
-              if (iframe.style.display === 'none') {
-                console.log('⏱️ Timeout: showing iframe anyway');
-                loadingDiv.style.opacity = '0';
-                setTimeout(() => {
-                  loadingDiv.style.display = 'none';
-                  iframe.style.display = 'block';
-                  iframe.style.opacity = '1';
-                }, 300);
-              }
+              loadingDiv.style.display = 'none';
+              iframe.style.display = 'block';
             }, 5000);
-            
           } else {
             throw new Error(data.error || 'Invalid response');
           }
         } catch (err) {
-          console.error('❌ Error:', err);
+          console.error('❌ Metabase error:', err);
           loadingDiv.innerHTML = `
-            <div style="text-align: center; color: #dc3545; padding: 40px;">
+            <div style="text-align: center; color: #dc3545;">
               <i class="fas fa-exclamation-circle" style="font-size: 48px;"></i>
               <p style="margin-top: 15px;"><strong>Gagal memuat dashboard</strong></p>
-              <p style="color: #666;">${err.message}</p>
               <button onclick="loadMetabaseDashboard()" class="btn btn-sm btn-primary mt-3">
                 <i class="fas fa-sync"></i> Coba Lagi
               </button>
@@ -1493,44 +1492,35 @@
       document.addEventListener('DOMContentLoaded', function() {
         console.log('✓ Page loaded, initializing...');
         
+        // Store user info in body dataset
+        const bodyEl = document.body;
+        bodyEl.dataset.perawat = bodyEl.querySelector('[data-perawat]')?.dataset.perawat || 'Unknown';
+        bodyEl.dataset.role = bodyEl.querySelector('[data-role]')?.dataset.role || 'perawat';
+        
+        // Request notification permission
         if ("Notification" in window && Notification.permission === "default") {
           Notification.requestPermission().then(permission => {
             console.log('📢 Notification permission:', permission);
           });
         }
         
+        // Initialize audio context
+        initializeAudio();
+        
+        // Start fall detection polling
         startFallDetectionPolling();
         
+        // Show audio unlock banner after 3 seconds
         setTimeout(() => {
           if (!audioUnlocked) {
             showAudioUnlockBanner();
           }
         }, 3000);
         
-        const requiredElements = [
-          'total-visits',
-          'total-measurements',
-          'visits-table-body',
-          'measurements-table-body'
-        ];
+        // Load initial data
+        loadRawatJalanData();
         
-        const allElementsExist = requiredElements.every(id => {
-          const exists = document.getElementById(id) !== null;
-          if (!exists) {
-            console.error(`❌ Required element #${id} not found`);
-          }
-          return exists;
-        });
-        
-        if (allElementsExist) {
-          console.log('✓ All required elements found');
-          loadRawatJalanData();
-        } else {
-          console.warn('⚠️ Some elements missing, retrying...');
-          setTimeout(() => loadRawatJalanData(), 500);
-        }
-        
-        console.log('✓ Fall detection client initialized');
+        console.log('✓ Dashboard initialized');
       });
 
       // ============================================
@@ -1541,6 +1531,9 @@
           clearInterval(fallCheckInterval);
         }
         stopAlertSound();
+        if (audioContext) {
+          audioContext.close();
+        }
       });
     </script>
   </body>

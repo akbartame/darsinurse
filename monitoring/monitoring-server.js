@@ -17,6 +17,11 @@ const { io: io_client } = require('socket.io-client');
 
 const app = express();
 const PORT = process.env.MONITORING_PORT || 5000;
+const processedFallIds = new Set();
+let lastCheckedVitalId = 0;
+const FALL_CHECK_INTERVAL = 10000; // ✅ FIX: 10 seconds instead of 1 second
+const PROCESSED_IDS_LIMIT = 1000; // ✅ Limit memory usage
+
 
 /* ============================================================
    HASH FUNCTION
@@ -595,13 +600,25 @@ rawajalanSocket.on('reconnect', (attemptNumber) => {
     timestamp: new Date()
   });
 });
-
 rawajalanSocket.on('new-fall-alert', (alert) => {
-  console.log('🚨 FALL ALERT RECEIVED');
+  console.log('🚨 FALL ALERT from Rawat Jalan Server');
   
   if (!alert || !alert.nama_pasien) {
     console.error('❌ Invalid alert data');
     return;
+  }
+  
+  // ✅ FIX: Check if already processed
+  if (processedFallIds.has(alert.id)) {
+    console.log(`⏭️ [SOCKET] Skipping duplicate: ID ${alert.id}`);
+    return;
+  }
+  
+  processedFallIds.add(alert.id);
+  
+  if (processedFallIds.size > PROCESSED_IDS_LIMIT) {
+    const idsToRemove = Array.from(processedFallIds).slice(0, 100);
+    idsToRemove.forEach(id => processedFallIds.delete(id));
   }
   
   const validatedAlert = {
@@ -615,9 +632,8 @@ rawajalanSocket.on('new-fall-alert', (alert) => {
     fall_confidence: alert.fall_confidence || 0.95
   };
   
+  console.log(`🚨 [SOCKET] Broadcasting fall: ${alert.nama_pasien}`);
   io.to('monitoring-room').emit('fall-alert', validatedAlert);
-  
-  console.log(`✓ Alert sent to ${io.engine.clientsCount} connected clients`);
 });
 
 rawajalanSocket.on('fall-acknowledged', (data) => {
@@ -649,15 +665,21 @@ io.on('connection', (socket) => {
     console.log('👀 Monitoring dashboard joined:', data);
   });
   
-  socket.on('acknowledge-fall', (data) => {
-    console.log('✓ Client acknowledged fall:', data.alertId);
-    
-    rawajalanSocket.emit('fall-acknowledged', {
-      alertId: data.alertId,
-      acknowledgedBy: data.acknowledgedBy || 'Unknown',
-      timestamp: new Date().toISOString()
-    });
+socket.on('acknowledge-fall', (data) => {
+  console.log('✓ Client acknowledged fall:', data.alertId);
+  
+  rawajalanSocket.emit('fall-acknowledged', {
+    alertId: data.alertId,
+    acknowledgedBy: data.acknowledgedBy || 'Unknown',
+    timestamp: new Date().toISOString()
   });
+  
+  socket.broadcast.to('monitoring-room').emit('fall-acknowledged-broadcast', {
+    alertId: data.alertId,
+    acknowledgedBy: data.acknowledgedBy
+  });
+});
+
   
   socket.on('check-connection', () => {
     socket.emit('connection-status', {
@@ -667,34 +689,31 @@ io.on('connection', (socket) => {
   });
 });
 /* ============================================================
-   AUTO-POLLING FALL DETECTION FROM DATABASE (FIXED)
+   FIXED: AUTO-POLLING FALL DETECTION FROM DATABASE
    ============================================================ */
 
-// ✅ FIX: Mulai dari waktu sekarang, bukan epoch
-let lastFallCheckTime = new Date();
-let lastCheckedVitalId = 0;
-const FALL_CHECK_INTERVAL = 1000; // ✅ FIX: Lebih cepat (3 detik)
+// ✅ FIX: Track processed fall IDs (using Set for O(1) lookup)
 
+// Initialize lastCheckedVitalId
 (async () => {
   try {
     const conn = await pool.getConnection();
-    const [result] = await conn.query('SELECT MAX(id) as max_id FROM vitals WHERE fall_detected = 1');
+    const [result] = await conn.query(
+      'SELECT MAX(id) as max_id FROM vitals WHERE fall_detected = 1'
+    );
     lastCheckedVitalId = result[0].max_id || 0;
     conn.release();
-    console.log(`✓ Realtime watcher initialized (last fall ID: ${lastCheckedVitalId})`);
+    console.log(`✓ Fall detection watcher initialized (last ID: ${lastCheckedVitalId})`);
   } catch (err) {
     console.error('❌ Initialize error:', err.message);
   }
 })();
 
-// ✅ FIX: Track alert yang sudah dikirim untuk menghindari duplikasi
-const sentAlertIds = new Set();
-
+// ✅ FIX: Main polling function with deduplication
 async function checkFallDetectionFromDatabase() {
   try {
     const conn = await pool.getConnection();
     
-    // ✅ ONLY check NEW records (ID > lastCheckedVitalId)
     const [falls] = await conn.query(`
       SELECT 
         v.id,
@@ -713,119 +732,73 @@ async function checkFallDetectionFromDatabase() {
       WHERE v.fall_detected = 1 
       AND v.id > ?
       ORDER BY v.id ASC
-      LIMIT 10
+      LIMIT 20
     `, [lastCheckedVitalId]);
     
     conn.release();
     
-    if (falls.length > 0) {
-      console.log(`🚨 [REALTIME] ${falls.length} NEW fall(s) detected instantly!`);
-      
-      falls.forEach(fall => {
-        // Update tracking ID
-        lastCheckedVitalId = Math.max(lastCheckedVitalId, fall.id);
-        
-        const fallId = `fall-${fall.id}`;
-        
-        if (sentAlertIds.has(fallId)) {
-          return;
-        }
-        
-        sentAlertIds.add(fallId);
-        
-        const alertData = {
-          id: fall.id,
-          emr_no: fall.emr_no,
-          nama_pasien: fall.nama_pasien,
-          room_id: fall.room_id || `EMR-${fall.emr_no}`,
-          poli: fall.poli,
-          waktu: fall.waktu.toISOString(),
-          heart_rate: fall.heart_rate,
-          sistolik: fall.sistolik,
-          diastolik: fall.diastolik,
-          blood_pressure: fall.sistolik && fall.diastolik 
-            ? `${fall.sistolik}/${fall.diastolik}` 
-            : 'N/A'
-        };
-        
-        console.log(`🚨 [REALTIME] Broadcasting fall ID ${fall.id}: ${fall.nama_pasien}`);
-        io.to('monitoring-room').emit('fall-alert', alertData);
-        
-        setTimeout(() => {
-          sentAlertIds.delete(fallId);
-        }, 300000);
-      });
+    if (falls.length === 0) {
+      return;
     }
     
+    console.log(`🚨 [DB-POLL] ${falls.length} NEW fall(s) detected`);
+    
+    falls.forEach(fall => {
+      lastCheckedVitalId = Math.max(lastCheckedVitalId, fall.id);
+      
+      if (processedFallIds.has(fall.id)) {
+        console.log(`⏭️ [DB-POLL] Skipping duplicate: ID ${fall.id}`);
+        return;
+      }
+      
+      processedFallIds.add(fall.id);
+      
+      if (processedFallIds.size > PROCESSED_IDS_LIMIT) {
+        const idsToRemove = Array.from(processedFallIds).slice(0, 100);
+        idsToRemove.forEach(id => processedFallIds.delete(id));
+        console.log(`🧹 Cleaned ${idsToRemove.length} old processed IDs`);
+      }
+      
+      const alertData = {
+        id: fall.id,
+        emr_no: fall.emr_no,
+        nama_pasien: fall.nama_pasien,
+        room_id: fall.room_id || `Room-${fall.emr_no}`,
+        poli: fall.poli,
+        waktu: fall.waktu.toISOString(),
+        heart_rate: fall.heart_rate,
+        sistolik: fall.sistolik,
+        diastolik: fall.diastolik,
+        blood_pressure: fall.sistolik && fall.diastolik 
+          ? `${fall.sistolik}/${fall.diastolik}` 
+          : 'N/A'
+      };
+      
+      console.log(`🚨 [DB-POLL] Broadcasting fall ID ${fall.id}: ${fall.nama_pasien}`);
+      io.to('monitoring-room').emit('fall-alert', alertData);
+    });
+    
   } catch (err) {
-    console.error('⚠️ [REALTIME] Error:', err.message);
+    console.error('⚠️ [DB-POLL] Error:', err.message);
   }
 }
 
-// ✅ FIX: Start polling
-let fallCheckInterval = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
-console.log(`✓ Fall detection auto-polling: ${FALL_CHECK_INTERVAL}ms interval`);
+let fallCheckIntervalId = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
+console.log(`✓ Fall detection auto-polling started (${FALL_CHECK_INTERVAL/1000}s interval)`);
 
-// ✅ FIX: Manual reset function (untuk debugging)
 global.resetFallPolling = () => {
-  sentAlertIds.clear();
-  lastFallCheckTime = new Date();
-  console.log('✓ Fall polling reset');
+  processedFallIds.clear();
+  console.log('✓ Fall polling reset - all processed IDs cleared');
 };
 
 /* ============================================================
-   SOCKET.IO CLIENT - CONNECT TO RAWAT JALAN (FIXED)
+   FALL DETECTION API ENDPOINTS
    ============================================================ */
 
-rawajalanSocket.on('new-fall-alert', (alert) => {
-  console.log('🚨 FALL ALERT from Rawat Jalan');
-  
-  if (!alert || !alert.nama_pasien) {
-    console.error('❌ Invalid alert data');
-    return;
-  }
-  
-  const fallId = `fall-${alert.id}`;
-  
-  // ✅ FIX: Cek duplikasi
-  if (sentAlertIds.has(fallId)) {
-    console.log(`⏭️ [SOCKET] Skipping duplicate: ${fallId}`);
-    return;
-  }
-  
-  sentAlertIds.add(fallId);
-  
-  const validatedAlert = {
-    id: alert.id || crypto.randomUUID(),
-    nama_pasien: alert.nama_pasien,
-    emr_no: alert.emr_no,
-    room_id: alert.room_id,
-    heart_rate: alert.heart_rate,
-    blood_pressure: alert.blood_pressure,
-    waktu: alert.waktu || new Date().toISOString(),
-    fall_confidence: alert.fall_confidence || 0.95
-  };
-  
-  io.to('monitoring-room').emit('fall-alert', validatedAlert);
-  console.log(`✓ Alert broadcast: ${fallId}`);
-  
-  // ✅ FIX: Cleanup
-  setTimeout(() => {
-    sentAlertIds.delete(fallId);
-  }, 300000);
-});
-
-/* ============================================================
-   FALL DETECTION API (FIXED)
-   ============================================================ */
-
+// Get latest falls (last 24 hours)
 app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) => {
   try {
     const conn = await pool.getConnection();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    // ✅ FIX: Tambahkan limit waktu untuk performa
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
     const [falls] = await conn.query(`
@@ -847,27 +820,33 @@ app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) =>
       WHERE v.fall_detected = 1 
       AND v.waktu >= ?
       ORDER BY v.waktu DESC
-      LIMIT 100
+      LIMIT 50
     `, [oneDayAgo]);
     
     conn.release();
-    res.json({ success: true, falls });
+    
+    res.json({ 
+      success: true, 
+      falls,
+      count: falls.length,
+      lastCheckedId: lastCheckedVitalId
+    });
   } catch (err) {
     console.error('❌ Fall detection API error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
+    res.status(500).json({ 
+      success: false,
+      error: 'Database error: ' + err.message 
+    });
   }
 });
 
-// ✅ FIX: Endpoint untuk reset polling (debugging)
-app.post('/api/fall-detection/reset-polling', requireAdminOrPerawat, (req, res) => {
-  global.resetFallPolling();
-  res.json({ success: true, message: 'Polling reset' });
-});
-
+// Acknowledge fall alert
 app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (req, res) => {
   try {
     const { id } = req.params;
     const { acknowledged_by } = req.body;
+    
+    console.log(`✅ Fall ${id} acknowledged by ${acknowledged_by}`);
     
     res.json({ 
       success: true, 
@@ -877,54 +856,50 @@ app.post('/api/fall-detection/:id/acknowledge', requireAdminOrPerawat, async (re
     });
   } catch (err) {
     console.error('❌ Acknowledge error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
   }
 });
 
-app.get('/debug/session', (req, res) => {
-  res.json({
-    sessionID: req.sessionID,
-    session: req.session,
-    cookies: req.headers.cookie,
-    secure: req.secure,
-    protocol: req.protocol,
-    hostname: req.hostname,
-    headers: {
-      'x-forwarded-proto': req.get('x-forwarded-proto'),
-      'x-forwarded-host': req.get('x-forwarded-host'),
-      'x-forwarded-for': req.get('x-forwarded-for')
-    }
-  });
-});
-
-app.get('/debug/force-login', async (req, res) => {
+// Reset polling (admin only, for debugging)
+app.post('/api/fall-detection/reset-polling', requireAdmin, (req, res) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM perawat LIMIT 1');
-    if (rows.length === 0) {
-      return res.send('No users in database');
+    processedFallIds.clear();
+    
+    if (req.body.resetLastId) {
+      lastCheckedVitalId = 0;
     }
     
-    const user = rows[0];
+    console.log('🔄 Polling reset by admin');
     
-    req.session.regenerate((err) => {
-      if (err) {
-        return res.send('Regenerate error: ' + err.message);
-      }
-      
-      req.session.emr_perawat = user.emr_perawat;
-      req.session.nama_perawat = user.nama;
-      req.session.role = user.role;
-      
-      req.session.save((saveErr) => {
-        if (saveErr) {
-          return res.send('Save error: ' + saveErr.message);
-        }
-        res.redirect('/');
-      });
+    res.json({ 
+      success: true, 
+      message: 'Polling reset',
+      processedIdsCleared: true,
+      lastCheckedId: lastCheckedVitalId
     });
   } catch (err) {
-    res.send('Database error: ' + err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
+});
+
+// Get polling statistics (admin only, for monitoring)
+app.get('/api/fall-detection/stats', requireAdmin, (req, res) => {
+  res.json({
+    success: true,
+    stats: {
+      lastCheckedVitalId,
+      processedFallsCount: processedFallIds.size,
+      pollingInterval: FALL_CHECK_INTERVAL,
+      rawajalanConnected: rawajalanSocket.connected,
+      connectedClients: io.engine.clientsCount
+    }
+  });
 });
 /* ============================================================
    START SERVER
@@ -942,6 +917,28 @@ server.listen(PORT, () => {
 ║                                        ║
 ╚════════════════════════════════════════╝
 `);
+});
+
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, cleaning up...');
+  if (fallCheckIntervalId) {
+    clearInterval(fallCheckIntervalId);
+  }
+  rawajalanSocket.disconnect();
+  server.close(() => {
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, cleaning up...');
+  if (fallCheckIntervalId) {
+    clearInterval(fallCheckIntervalId);
+  }
+  rawajalanSocket.disconnect();
+  server.close(() => {
+    process.exit(0);
+  });
 });
 
 module.exports = { app, server, io };
