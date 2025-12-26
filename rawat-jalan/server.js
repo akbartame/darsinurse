@@ -410,20 +410,20 @@ app.get('/rooms', requireLogin, (req, res) => {
   });
 });
 
-// ✅ API ROUTES - ROOM MANAGEMENT
 app.get('/api/rooms', requireAdminOrPerawat, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
     
+    // ✅ FIX: Gunakan 'assigned_at' (sesuai database asli)
     const [rooms] = await conn.query(`
       SELECT 
-        rd.room_id,
-        rd.device_id,
-        rd.emr_no,
+        room_id,
+        device_id,
+        emr_no,
         p.nama as nama_pasien,
         p.poli,
-        rd.created_at as assigned_at
+        assigned_at
       FROM room_device rd
       LEFT JOIN pasien p ON rd.emr_no = p.emr_no
       ORDER BY rd.room_id ASC
@@ -446,6 +446,8 @@ app.get('/api/rooms', requireAdminOrPerawat, async (req, res) => {
     if (conn) conn.release();
   }
 });
+
+// ✅ JUGA PERBAIKI endpoint lain yang pakai created_at:
 
 app.get('/api/rooms/available-patients', requireAdminOrPerawat, async (req, res) => {
   let conn;
@@ -498,7 +500,7 @@ app.post('/api/rooms/add', requireAdminOrPerawat, async (req, res) => {
     conn = await pool.getConnection();
     
     const [existing] = await conn.query(
-      'SELECT id FROM room_device WHERE room_id = ?',
+      'SELECT 1 FROM room_device WHERE room_id = ?',
       [room_id.trim()]
     );
     
@@ -511,7 +513,7 @@ app.post('/api/rooms/add', requireAdminOrPerawat, async (req, res) => {
     
     if (emrValue !== null) {
       const [patientCheck] = await conn.query(
-        'SELECT emr_no FROM pasien WHERE emr_no = ?',
+        'SELECT 1 FROM pasien WHERE emr_no = ?',
         [emrValue]
       );
       
@@ -521,8 +523,9 @@ app.post('/api/rooms/add', requireAdminOrPerawat, async (req, res) => {
       }
     }
     
+    // ✅ INSERT tanpa created_at, gunakan assigned_at jika diperlukan
     await conn.query(
-      'INSERT INTO room_device (room_id, device_id, emr_no) VALUES (?, ?, ?)',
+      'INSERT INTO room_device (room_id, device_id, emr_no, assigned_at) VALUES (?, ?, ?, NOW())',
       [room_id.trim(), device_id.trim(), emrValue]
     );
     
@@ -551,7 +554,7 @@ app.put('/api/rooms/:room_id', requireAdminOrPerawat, async (req, res) => {
     conn = await pool.getConnection();
     
     const [roomCheck] = await conn.query(
-      'SELECT id FROM room_device WHERE room_id = ?',
+      'SELECT 1 FROM room_device WHERE room_id = ?',
       [room_id]
     );
     
@@ -562,7 +565,7 @@ app.put('/api/rooms/:room_id', requireAdminOrPerawat, async (req, res) => {
     
     if (new_room_id.trim() !== room_id) {
       const [duplicate] = await conn.query(
-        'SELECT id FROM room_device WHERE room_id = ?',
+        'SELECT 1 FROM room_device WHERE room_id = ?',
         [new_room_id.trim()]
       );
       
@@ -606,7 +609,7 @@ app.post('/api/rooms/assign', requireAdminOrPerawat, async (req, res) => {
     conn = await pool.getConnection();
     
     const [patient] = await conn.query(
-      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      'SELECT 1 FROM pasien WHERE emr_no = ?',
       [emrInt]
     );
     
@@ -616,7 +619,7 @@ app.post('/api/rooms/assign', requireAdminOrPerawat, async (req, res) => {
     }
     
     const [room] = await conn.query(
-      'SELECT id FROM room_device WHERE room_id = ?',
+      'SELECT 1 FROM room_device WHERE room_id = ?',
       [room_id.trim()]
     );
     
@@ -626,7 +629,7 @@ app.post('/api/rooms/assign', requireAdminOrPerawat, async (req, res) => {
     }
     
     await conn.query(
-      'UPDATE room_device SET emr_no = ? WHERE room_id = ?',
+      'UPDATE room_device SET emr_no = ?, assigned_at = NOW() WHERE room_id = ?',
       [emrInt, room_id.trim()]
     );
     
@@ -651,7 +654,7 @@ app.post('/api/rooms/remove-patient', requireAdminOrPerawat, async (req, res) =>
     conn = await pool.getConnection();
     
     const [room] = await conn.query(
-      'SELECT id FROM room_device WHERE room_id = ?',
+      'SELECT 1 FROM room_device WHERE room_id = ?',
       [room_id.trim()]
     );
     
@@ -686,7 +689,7 @@ app.delete('/api/rooms/delete', requireAdminOrPerawat, async (req, res) => {
     conn = await pool.getConnection();
     
     const [room] = await conn.query(
-      'SELECT id, emr_no FROM room_device WHERE room_id = ?',
+      'SELECT emr_no FROM room_device WHERE room_id = ?',
       [room_id.trim()]
     );
     
