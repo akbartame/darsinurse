@@ -1314,6 +1314,137 @@ io.on('connection', (socket) => {
 });
 
 /* ============================================================
+   ADD AFTER SOCKET.IO SETUP (around line 800)
+   ============================================================ */
+
+// ✅ NEW: Real-time vital signs broadcasting
+let lastCheckedVitalTimestamp = new Date();
+
+async function broadcastVitalUpdates() {
+  try {
+    const conn = await pool.getConnection();
+    
+    // Get new vitals since last check
+    const [newVitals] = await conn.query(`
+      SELECT 
+        v.id, v.emr_no, v.waktu,
+        v.heart_rate, v.respirasi, v.glukosa,
+        v.sistolik, v.diastolik,
+        v.jarak_kasur_cm, v.fall_detected,
+        v.berat_badan_kg, v.tinggi_badan_cm, v.bmi,
+        p.nama as nama_pasien,
+        rd.room_id
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_no
+      LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      WHERE v.waktu > ?
+      ORDER BY v.waktu ASC
+      LIMIT 50
+    `, [lastCheckedVitalTimestamp]);
+    
+    conn.release();
+    
+    if (newVitals.length === 0) return;
+    
+    // Update last checked timestamp
+    lastCheckedVitalTimestamp = new Date(newVitals[newVitals.length - 1].waktu);
+    
+    console.log(`📊 Broadcasting ${newVitals.length} vital update(s)`);
+    
+    // Broadcast each vital update
+    newVitals.forEach(vital => {
+      const vitalData = {
+        id: vital.id,
+        emr_no: vital.emr_no,
+        nama_pasien: vital.nama_pasien,
+        room_id: vital.room_id,
+        waktu: vital.waktu,
+        vitals: {
+          heart_rate: vital.heart_rate,
+          respirasi: vital.respirasi,
+          glukosa: vital.glukosa,
+          sistolik: vital.sistolik,
+          diastolik: vital.diastolik,
+          jarak_kasur_cm: vital.jarak_kasur_cm,
+          fall_detected: vital.fall_detected,
+          berat_badan_kg: vital.berat_badan_kg,
+          tinggi_badan_cm: vital.tinggi_badan_cm,
+          bmi: vital.bmi
+        }
+      };
+      
+      // Broadcast to all clients
+      io.to('monitoring-room').emit('vital-update', vitalData);
+      
+      // Also emit to specific patient room if someone is viewing details
+      io.to(`patient-${vital.emr_no}`).emit('vital-update-detail', vitalData);
+    });
+    
+  } catch (err) {
+    console.error('⚠️ Vital broadcast error:', err.message);
+  }
+}
+
+// Poll database every 2 seconds for new vitals
+const VITAL_CHECK_INTERVAL = 2000; // 2 seconds
+const vitalCheckIntervalId = setInterval(broadcastVitalUpdates, VITAL_CHECK_INTERVAL);
+
+console.log('✓ Real-time vital monitoring started (2s interval)');
+
+/* ============================================================
+   UPDATE SOCKET.IO CONNECTION HANDLER
+   ============================================================ */
+
+io.on('connection', (socket) => {
+  console.log('🔌 Client connected:', socket.id);
+  
+  socket.join('monitoring-room');
+  
+  socket.emit('connection-status', {
+    rawajalanConnected: rawajalanSocket.connected
+  });
+  
+  // ✅ NEW: Join patient-specific room when viewing detail
+  socket.on('join-patient-room', (data) => {
+    if (data.emr_no) {
+      socket.join(`patient-${data.emr_no}`);
+      console.log(`📍 Socket ${socket.id} joined patient-${data.emr_no}`);
+    }
+  });
+  
+  // ✅ NEW: Leave patient room
+  socket.on('leave-patient-room', (data) => {
+    if (data.emr_no) {
+      socket.leave(`patient-${data.emr_no}`);
+      console.log(`📤 Socket ${socket.id} left patient-${data.emr_no}`);
+    }
+  });
+  
+  socket.on('acknowledge-fall', (data) => {
+    rawajalanSocket.emit('fall-acknowledged', {
+      alertId: data.alertId,
+      acknowledgedBy: data.acknowledgedBy,
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('❌ Client disconnected:', socket.id);
+  });
+});
+
+/* ============================================================
+   UPDATE SIGTERM HANDLER (ADD VITAL CLEANUP)
+   ============================================================ */
+
+process.on('SIGTERM', () => {
+  clearInterval(fallCheckIntervalId);
+  clearInterval(vitalCheckIntervalId); // ✅ NEW
+  rawajalanSocket.disconnect();
+  server.close(() => process.exit(0));
+});
+
+/* ============================================================
    AUTO-POLLING FALL DETECTION
    ============================================================ */
 

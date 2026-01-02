@@ -1946,6 +1946,241 @@
         closeFallAlert(data.alertId, false); // Close without sending acknowledge again
       }
     });
+/* ============================================================
+   ADD AFTER SOCKET.IO CONNECTION (around line 300)
+   ============================================================ */
+
+// ✅ NEW: Real-time vital signs update handler
+socket.on('vital-update', (data) => {
+  console.log('📊 Real-time vital update:', {
+    emr: data.emr_no,
+    patient: data.nama_pasien,
+    hr: data.vitals.heart_rate,
+    resp: data.vitals.respirasi
+  });
+  
+  // Update list view if visible
+  if (!currentPatientEMR) {
+    updatePatientRowVitals(data.emr_no, data.vitals);
+  }
+  
+  // Update detail view if this patient is being viewed
+  if (currentPatientEMR === data.emr_no) {
+    updateVitalsDisplayRealtime(data.vitals);
+  }
+});
+
+// ✅ NEW: Detailed vital update for current patient
+socket.on('vital-update-detail', (data) => {
+  if (currentPatientEMR === data.emr_no) {
+    console.log('🎯 Detailed vital update for current patient');
+    updateVitalsDisplayRealtime(data.vitals);
+    updateChartsRealtime(data.vitals, data.waktu);
+  }
+});
+
+/* ============================================================
+   NEW FUNCTION: Update vitals display with animation
+   ============================================================ */
+
+function updateVitalsDisplayRealtime(vitals) {
+  // Update Heart Rate
+  const hrCard = document.querySelector('.vital-card .vital-number');
+  if (hrCard && vitals.heart_rate) {
+    animateVitalUpdate(hrCard, vitals.heart_rate, getHeartRateClass(vitals.heart_rate));
+  }
+  
+  // Update Respirasi
+  const respCards = document.querySelectorAll('.vital-card');
+  if (respCards[1] && vitals.respirasi) {
+    const respNumber = respCards[1].querySelector('.vital-number');
+    if (respNumber) {
+      animateVitalUpdate(respNumber, vitals.respirasi, getRespirasiClass(vitals.respirasi));
+    }
+  }
+  
+  // Update Glukosa
+  if (respCards[2] && vitals.glukosa) {
+    const glukosaNumber = respCards[2].querySelector('.vital-number');
+    if (glukosaNumber) {
+      animateVitalUpdate(glukosaNumber, vitals.glukosa, '');
+    }
+  }
+  
+  // Update Fall Status
+  if (respCards[3] && vitals.fall_detected !== undefined) {
+    const statusBadge = respCards[3].querySelector('.status-badge');
+    if (statusBadge) {
+      const newStatus = vitals.fall_detected === 1 ? 'DETECTED' : 'NORMAL';
+      const newClass = vitals.fall_detected === 1 ? 'status-detected' : 'status-normal';
+      
+      statusBadge.textContent = newStatus;
+      statusBadge.className = `status-badge ${newClass}`;
+      
+      // Pulse animation for fall status change
+      statusBadge.style.animation = 'pulse 0.5s ease-in-out';
+      setTimeout(() => {
+        statusBadge.style.animation = '';
+      }, 500);
+    }
+  }
+  
+  // Update timestamp
+  const timestampEl = respCards[3]?.querySelector('.vital-unit');
+  if (timestampEl) {
+    timestampEl.textContent = formatTime(new Date());
+  }
+}
+
+/* ============================================================
+   NEW FUNCTION: Animate vital value changes
+   ============================================================ */
+
+function animateVitalUpdate(element, newValue, className) {
+  const currentValue = parseInt(element.textContent);
+  const targetValue = parseInt(newValue);
+  
+  if (currentValue === targetValue) return;
+  
+  // Add pulse animation
+  element.style.animation = 'pulseGreen 0.5s ease-in-out';
+  
+  // Update value
+  element.textContent = newValue;
+  
+  // Update class for color
+  element.className = `vital-number ${className}`;
+  
+  // Remove animation after completion
+  setTimeout(() => {
+    element.style.animation = '';
+  }, 500);
+}
+
+/* ============================================================
+   NEW FUNCTION: Update table row vitals (list view)
+   ============================================================ */
+
+function updatePatientRowVitals(emr_no, vitals) {
+  const rows = document.querySelectorAll('.patients-table tbody tr');
+  
+  rows.forEach(row => {
+    const emrCell = row.querySelector('td:first-child strong');
+    if (emrCell && emrCell.textContent == emr_no) {
+      // Update Heart Rate
+      const hrCell = row.querySelector('td:nth-child(8) .vital-value');
+      if (hrCell && vitals.heart_rate) {
+        hrCell.textContent = vitals.heart_rate;
+        hrCell.className = `vital-value ${getHeartRateClass(vitals.heart_rate)}`;
+        
+        // Flash animation
+        hrCell.style.backgroundColor = 'rgba(0, 255, 0, 0.2)';
+        setTimeout(() => {
+          hrCell.style.backgroundColor = '';
+        }, 500);
+      }
+      
+      // Update Respirasi
+      const respCell = row.querySelector('td:nth-child(9) .vital-value');
+      if (respCell && vitals.respirasi) {
+        respCell.textContent = vitals.respirasi;
+        respCell.className = `vital-value ${getRespirasiClass(vitals.respirasi)}`;
+        
+        // Flash animation
+        respCell.style.backgroundColor = 'rgba(0, 255, 0, 0.2)';
+        setTimeout(() => {
+          respCell.style.backgroundColor = '';
+        }, 500);
+      }
+      
+      // Update Fall Status
+      const fallCell = row.querySelector('td:nth-child(11) .status-badge');
+      if (fallCell && vitals.fall_detected !== undefined) {
+        const isFallDetected = vitals.fall_detected === 1;
+        fallCell.textContent = isFallDetected ? '🚨 TERDETEKSI' : '✓ NORMAL';
+        fallCell.className = `status-badge ${isFallDetected ? 'status-detected' : 'status-normal'}`;
+      }
+    }
+  });
+}
+
+/* ============================================================
+   NEW FUNCTION: Update charts in real-time
+   ============================================================ */
+
+function updateChartsRealtime(vitals, timestamp) {
+  const timeLabel = formatChartTime(timestamp);
+  
+  // Update Heart Rate Chart
+  if (charts.hr && vitals.heart_rate) {
+    charts.hr.data.labels.push(timeLabel);
+    charts.hr.data.datasets[0].data.push(vitals.heart_rate);
+    
+    // Keep only last 50 points
+    if (charts.hr.data.labels.length > 50) {
+      charts.hr.data.labels.shift();
+      charts.hr.data.datasets[0].data.shift();
+    }
+    
+    charts.hr.update('none'); // Update without animation for performance
+  }
+  
+  // Update Respiratory Chart
+  if (charts.resp && vitals.respirasi) {
+    charts.resp.data.labels.push(timeLabel);
+    charts.resp.data.datasets[0].data.push(vitals.respirasi);
+    
+    if (charts.resp.data.labels.length > 50) {
+      charts.resp.data.labels.shift();
+      charts.resp.data.datasets[0].data.shift();
+    }
+    
+    charts.resp.update('none');
+  }
+  
+  // Update Blood Pressure Chart
+  if (charts.bp && (vitals.sistolik || vitals.diastolik)) {
+    charts.bp.data.labels.push(timeLabel);
+    charts.bp.data.datasets[0].data.push(vitals.sistolik);
+    charts.bp.data.datasets[1].data.push(vitals.diastolik);
+    
+    if (charts.bp.data.labels.length > 50) {
+      charts.bp.data.labels.shift();
+      charts.bp.data.datasets[0].data.shift();
+      charts.bp.data.datasets[1].data.shift();
+    }
+    
+    charts.bp.update('none');
+  }
+  
+  // Update Glucose Chart
+  if (charts.glukosa && vitals.glukosa) {
+    charts.glukosa.data.labels.push(timeLabel);
+    charts.glukosa.data.datasets[0].data.push(vitals.glukosa);
+    
+    if (charts.glukosa.data.labels.length > 50) {
+      charts.glukosa.data.labels.shift();
+      charts.glukosa.data.datasets[0].data.shift();
+    }
+    
+    charts.glukosa.update('none');
+  }
+  
+  // Update Fall Chart
+  if (charts.fall && vitals.fall_detected !== undefined) {
+    charts.fall.data.labels.push(timeLabel);
+    charts.fall.data.datasets[0].data.push(vitals.fall_detected ? 1 : 0);
+    charts.fall.data.datasets[0].backgroundColor.push(vitals.fall_detected ? '#e74c3c' : '#27ae60');
+    
+    if (charts.fall.data.labels.length > 50) {
+      charts.fall.data.labels.shift();
+      charts.fall.data.datasets[0].data.shift();
+      charts.fall.data.datasets[0].backgroundColor.shift();
+    }
+    
+    charts.fall.update('none');
+  }
+}
 
     // ============================================
     // CENTRALIZED FALL ALERT HANDLER
@@ -2825,6 +3060,10 @@
 
     function showDetailView(emr_no) {
       currentPatientEMR = emr_no;
+      
+      // ✅ NEW: Join Socket.IO room for this patient
+      socket.emit('join-patient-room', { emr_no: emr_no });
+      
       document.getElementById('list-view').classList.remove('active');
       document.getElementById('detail-view').classList.add('active');
       loadPatientDetail(emr_no);
@@ -2833,6 +3072,11 @@
     }
 
     function showListView() {
+      // ✅ NEW: Leave Socket.IO room
+      if (currentPatientEMR) {
+        socket.emit('leave-patient-room', { emr_no: currentPatientEMR });
+      }
+      
       currentPatientEMR = null;
       document.getElementById('detail-view').classList.remove('active');
       document.getElementById('list-view').classList.add('active');
@@ -2842,6 +3086,14 @@
       });
       charts = {};
     }
+
+    setInterval(() => {
+      if (currentPatientEMR) {
+        // Only refresh full chart data every 5 minutes
+        loadVitalsChart(currentPatientEMR);
+      }
+    }, 300000);
+
 
     async function loadPatientDetail(emr_no) {
       try {
@@ -3212,18 +3464,6 @@
     // ============================================================
     // AUTO REFRESH
     // ============================================================
-
-    setInterval(() => {
-      if (currentPatientEMR) {
-        loadPatientDetail(currentPatientEMR);
-      }
-    }, 10000);
-
-    setInterval(() => {
-      if (!currentPatientEMR) {
-        loadPatients();
-      }
-    }, 30000);
 
     setInterval(() => {
       if (currentPatientEMR) {
