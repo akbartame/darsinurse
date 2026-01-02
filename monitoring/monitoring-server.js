@@ -1058,10 +1058,9 @@ app.get('/api/rawat-inap/patient/:emr_no/vitals', requireAdminOrPerawat, async (
     });
   }
 });
-
 /* ============================================================
-   PATIENT MONITORING API ROUTES
-   Add these routes to monitoring-server.js
+   FIX API ENDPOINTS - PATIENT MONITORING
+   Replace these routes in your monitoring-server.js
    ============================================================ */
 
 // GET: List all inpatients with basic info
@@ -1084,6 +1083,8 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
         (SELECT heart_rate FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as heart_rate,
         (SELECT fall_detected FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as status_fall,
         (SELECT waktu FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as waktu,
+        (SELECT emr_perawat FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as emr_perawat_vital,
+        (SELECT emr_dokter FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as emr_dokter_vital,
         pr.nama as nama_perawat,
         d.nama as nama_dokter,
         k.status as status_kunjungan
@@ -1091,7 +1092,9 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
       INNER JOIN pasien p ON rd.emr_no = p.emr_no
       LEFT JOIN kunjungan k ON p.emr_no = k.emr_no AND k.status = 'aktif'
       LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
-      LEFT JOIN dokter d ON p.emr_dokter = d.emr_dokter
+      LEFT JOIN dokter d ON (
+        SELECT emr_dokter FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1
+      ) = d.emr_dokter
       WHERE rd.emr_no IS NOT NULL
       ORDER BY rd.room_id ASC
     `);
@@ -1155,15 +1158,14 @@ app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, re
         p.poli,
         rd.room_id,
         k.id_kunjungan,
-        pr.nama as nama_perawat,
-        d.nama as nama_dokter,
         k.status as status_kunjungan,
-        k.keluhan
+        k.keluhan,
+        pr.nama as nama_perawat,
+        d.nama as nama_dokter
       FROM pasien p
       LEFT JOIN room_device rd ON p.emr_no = rd.emr_no
       LEFT JOIN kunjungan k ON p.emr_no = k.emr_no AND k.status = 'aktif'
       LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
-      LEFT JOIN dokter d ON p.emr_dokter = d.emr_dokter
       WHERE p.emr_no = ?
     `, [emrInt]);
     
@@ -1172,14 +1174,16 @@ app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, re
       return res.status(404).json({ error: 'Patient not found' });
     }
     
-    // Get latest vitals
+    // Get latest vitals with dokter info
     const [latestVital] = await conn.query(`
       SELECT 
-        heart_rate, respirasi, fall_detected, waktu,
-        sistolik, diastolik, glukosa
-      FROM vitals
-      WHERE emr_no = ?
-      ORDER BY waktu DESC
+        v.heart_rate, v.respirasi, v.fall_detected, v.waktu,
+        v.sistolik, v.diastolik, v.glukosa, v.emr_dokter,
+        d.nama as nama_dokter_vital
+      FROM vitals v
+      LEFT JOIN dokter d ON v.emr_dokter = d.emr_dokter
+      WHERE v.emr_no = ?
+      ORDER BY v.waktu DESC
       LIMIT 1
     `, [emrInt]);
     
@@ -1187,6 +1191,9 @@ app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, re
     
     const patientData = patient[0];
     const vitalData = latestVital[0] || {};
+    
+    // Gunakan dokter dari vital jika ada, jika tidak gunakan dari kunjungan
+    const dokterName = vitalData.nama_dokter_vital || patientData.nama_dokter || 'Belum ditentukan';
     
     res.json({
       success: true,
@@ -1200,7 +1207,7 @@ app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, re
         room_id: patientData.room_id,
         id_kunjungan: patientData.id_kunjungan,
         nama_perawat: patientData.nama_perawat || 'Belum ditugaskan',
-        nama_dokter: patientData.nama_dokter || 'Belum ditentukan',
+        nama_dokter: dokterName,
         status_kunjungan: patientData.status_kunjungan,
         keluhan: patientData.keluhan
       },
@@ -1252,8 +1259,14 @@ app.get('/api/patients/inpatient/:emr_no/examinations', requireAdminOrPerawat, a
         v.diastolik,
         v.fall_detected,
         v.tinggi_badan_cm,
-        v.bmi
+        v.bmi,
+        v.emr_perawat,
+        v.emr_dokter,
+        pr.nama as nama_perawat,
+        d.nama as nama_dokter
       FROM vitals v
+      LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
+      LEFT JOIN dokter d ON v.emr_dokter = d.emr_dokter
       WHERE v.emr_no = ?
       ORDER BY v.waktu DESC
       LIMIT 100
