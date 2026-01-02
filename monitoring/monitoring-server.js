@@ -297,6 +297,13 @@ app.get('/', requireLogin, (req, res) => {
     role: req.session.role
   });
 });
+app.get('/monitoring-rawat-inap', requireLogin, (req, res) => {
+  res.render('monitoring-rawat-inap', {
+    nama_perawat: req.session.nama_perawat,
+    emr_perawat: req.session.emr_perawat,
+    role: req.session.role
+  });
+});
 app.get('/rooms', requireLogin, (req, res) => {
   res.render('room-management', {
     nama_perawat: req.session.nama_perawat,
@@ -897,19 +904,16 @@ app.get('/api/metabase/rawat-inap-token', requireAdminOrPerawat, (req, res) => {
   }
 });
 
+/* ============================================================
+   API ENDPOINTS - RAWAT INAP (NEW)
+   ============================================================ */
 
-
-// ============================================================
-// TAMBAHAN ENDPOINT UNTUK RAWAT INAP (Ganti Metabase)
-// Sisipkan endpoint ini sebelum section Socket.IO setup
-// ============================================================
-
+// GET: Daftar pasien rawat inap dengan vital signs terbaru
 app.get('/api/rawat-inap/patients', requireAdminOrPerawat, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
     
-    // ✅ Query untuk mengambil data pasien rawat inap dengan vital signs terbaru
     const [patients] = await conn.query(`
       SELECT 
         p.emr_no,
@@ -919,54 +923,28 @@ app.get('/api/rawat-inap/patients', requireAdminOrPerawat, async (req, res) => {
         p.jenis_kelamin,
         rd.room_id,
         p.poli,
-        -- Vital signs terbaru
-        v.respirasi,
-        v.heart_rate,
-        v.jarak_kasur_cm,
-        v.fall_detected,
-        v.id as vital_id,
-        v.waktu as waktu_vital,
-        -- Perawat
-        pr.nama as nama_perawat,
-        pr.emr_perawat,
-        -- Dokter (jika ada relasi)
+        p.emr_dokter,
+        (SELECT respirasi FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as respirasi,
+        (SELECT heart_rate FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as heart_rate,
+        (SELECT jarak_kasur_cm FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as jarak_kasur_cm,
+        (SELECT fall_detected FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as fall_detected,
+        (SELECT id FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as vital_id,
+        (SELECT waktu FROM vitals WHERE emr_no = p.emr_no ORDER BY waktu DESC LIMIT 1) as waktu_vital,
+        (SELECT pr.nama FROM kunjungan k 
+         JOIN perawat pr ON k.emr_perawat = pr.emr_perawat 
+         WHERE k.emr_no = p.emr_no 
+         ORDER BY k.tanggal_kunjungan DESC LIMIT 1) as nama_perawat,
         d.nama as nama_dokter,
-        d.emr_dokter,
-        -- Kunjungan
-        k.id_kunjungan,
-        k.status,
-        k.tanggal_kunjungan
+        (SELECT id_kunjungan FROM kunjungan WHERE emr_no = p.emr_no ORDER BY tanggal_kunjungan DESC LIMIT 1) as id_kunjungan,
+        (SELECT status FROM kunjungan WHERE emr_no = p.emr_no ORDER BY tanggal_kunjungan DESC LIMIT 1) as status
       FROM room_device rd
-      LEFT JOIN pasien p ON rd.emr_no = p.emr_no
-      LEFT JOIN (
-        SELECT * FROM vitals 
-        WHERE emr_no IN (SELECT emr_no FROM room_device WHERE emr_no IS NOT NULL)
-        ORDER BY waktu DESC
-      ) v ON p.emr_no = v.emr_no 
-        AND v.waktu = (
-          SELECT MAX(waktu) 
-          FROM vitals 
-          WHERE emr_no = p.emr_no
-        )
-      LEFT JOIN perawat pr ON (
-        SELECT emr_perawat FROM kunjungan 
-        WHERE emr_no = p.emr_no 
-        ORDER BY tanggal_kunjungan DESC 
-        LIMIT 1
-      ) = pr.emr_perawat
+      INNER JOIN pasien p ON rd.emr_no = p.emr_no
       LEFT JOIN dokter d ON p.emr_dokter = d.emr_dokter
-      LEFT JOIN kunjungan k ON (
-        SELECT id_kunjungan FROM kunjungan 
-        WHERE emr_no = p.emr_no 
-        ORDER BY tanggal_kunjungan DESC 
-        LIMIT 1
-      ) = k.id_kunjungan
       WHERE rd.emr_no IS NOT NULL
       ORDER BY rd.room_id ASC
     `);
     
-    // Format response
-    const formattedPatients = Array.isArray(patients) ? patients.map(p => ({
+    const formattedPatients = (Array.isArray(patients) ? patients : []).map(p => ({
       emr_no: p.emr_no,
       nama: p.nama,
       alamat: p.alamat,
@@ -984,7 +962,7 @@ app.get('/api/rawat-inap/patients', requireAdminOrPerawat, async (req, res) => {
       nama_dokter: p.nama_dokter || 'Belum ditentukan',
       id_kunjungan: p.id_kunjungan,
       status: p.status || 'aktif'
-    })) : [];
+    }));
     
     conn.release();
     
@@ -1003,17 +981,16 @@ app.get('/api/rawat-inap/patients', requireAdminOrPerawat, async (req, res) => {
   }
 });
 
+// GET: Statistik rawat inap
 app.get('/api/rawat-inap/stats', requireAdminOrPerawat, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
     
-    // Total pasien di rawat inap
     const [totalPatients] = await conn.query(`
       SELECT COUNT(*) as total FROM room_device WHERE emr_no IS NOT NULL
     `);
     
-    // Jumlah fall detected hari ini
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -1043,6 +1020,7 @@ app.get('/api/rawat-inap/stats', requireAdminOrPerawat, async (req, res) => {
   }
 });
 
+// GET: Riwayat vital signs pasien
 app.get('/api/rawat-inap/patient/:emr_no/vitals', requireAdminOrPerawat, async (req, res) => {
   let conn;
   try {
@@ -1055,7 +1033,6 @@ app.get('/api/rawat-inap/patient/:emr_no/vitals', requireAdminOrPerawat, async (
     
     conn = await pool.getConnection();
     
-    // Ambil 20 vital signs terakhir untuk chart
     const [vitals] = await conn.query(`
       SELECT 
         id, waktu, heart_rate, sistolik, diastolik, 
@@ -1082,14 +1059,6 @@ app.get('/api/rawat-inap/patient/:emr_no/vitals', requireAdminOrPerawat, async (
   }
 });
 
-// ✅ Endpoint untuk page rendering
-app.get('/monitoring', requireLogin, (req, res) => {
-  res.render('monitoring-dashboard', {
-    nama_perawat: req.session.nama_perawat,
-    emr_perawat: req.session.emr_perawat,
-    role: req.session.role
-  });
-});
 /* ============================================================
    SOCKET.IO SETUP
    ============================================================ */
