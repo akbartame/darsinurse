@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Darsinurse - Monitoring Rawat Inap</title>
+  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📊</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+
+  <style>
+    :root {
+      --primary-green: #00B14F;
+      --secondary-green: #008a3d;
+      --primary-blue: #0056b3;
+      --primary-dark: #003d7a;
+      --secondary-teal: #20c997;
+      --light-bg: #f0f8f7;
+      --dark-text: #1a3a3a;
+      --gray-border: #e0e0e0;
+      --danger-red: #dc3545;
+      --warning-orange: #ff9800;
+      --success-green: #28a745;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--dark-text);
+      background: linear-gradient(135deg, #f5f5f5 0%, #e8f5e9 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ============== HEADER ============== */
+    .top-header {
+      background: white;
+      padding: 1rem 0;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-section i {
+      font-size: 28px;
+      color: var(--primary-green);
+    }
+
+    .logo-section h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin: 0;
+    }
+
+    .nav-section {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 14px;
+    }
+
+    .nav-section a {
+      color: var(--primary-blue);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+
+    .nav-section a:hover {
+      color: var(--primary-dark);
+    }
+
+    .logout-btn {
+      color: var(--danger-red) !important;
+    }
+
+    /* ============== MAIN CONTAINER ============== */
+    .main-container {
+      padding-top: 80px;
+      padding: 2rem;
+      flex: 1;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin-bottom: 8px;
+    }
+
+    .page-subtitle {
+      font-size: 16px;
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    /* ============== STATS GRID ============== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      transition: all 0.3s;
+      border-top: 5px solid var(--primary-green);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    }
+
+    .stat-card.danger {
+      border-top-color: var(--danger-red);
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .stat-number {
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--primary-green);
+      margin-bottom: 4px;
+    }
+
+    .stat-card.danger .stat-number {
+      color: var(--danger-red);
+    }
+
+    .stat-icon {
+      float: right;
+      font-size: 32px;
+      color: rgba(0, 177, 79, 0.2);
+    }
+
+    .stat-card.danger .stat-icon {
+      color: rgba(220, 53, 69, 0.2);
+    }
+
+    /* ============== PATIENT GRID ============== */
+    .patients-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+      gap: 25px;
+      margin-bottom: 40px;
+    }
+
+    .patient-card {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border-left: 6px solid var(--primary-green);
+      transition: all 0.3s;
+    }
+
+    .patient-card.fall-alert {
+      border-left-color: var(--danger-red);
+      background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+      box-shadow: 0 4px 25px rgba(220, 53, 69, 0.2);
+      animation: fallPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes fallPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .patient-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    }
+
+    .patient-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid var(--gray-border);
+    }
+
+    .patient-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin-bottom: 8px;
+    }
+
+    .patient-meta {
+      font-size: 13px;
+      color: #666;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .meta-item {
+      display: flex;
+      gap: 8px;
+    }
+
+    .meta-label {
+      font-weight: 600;
+      color: #999;
+      min-width: 80px;
+    }
+
+    .fall-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+      color: white;
+      padding: 8px 15px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      animation: badgePulse 1s ease-in-out infinite;
+    }
+
+    @keyframes badgePulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* ============== VITALS GRID ============== */
+    .vitals-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .vital-box {
+      background: linear-gradient(135deg, #f0f8f7 0%, #e8f5e9 100%);
+      padding: 15px;
+      border-radius: 10px;
+      border-left: 4px solid var(--primary-green);
+      transition: all 0.3s;
+    }
+
+    .vital-box.warning {
+      background: linear-gradient(135deg, #fff8f0 0%, #ffe8d1 100%);
+      border-left-color: var(--warning-orange);
+    }
+
+    .vital-box.danger {
+      background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+      border-left-color: var(--danger-red);
+    }
+
+    .vital-label {
+      font-size: 11px;
+      color: #999;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .vital-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--dark-text);
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .vital-unit {
+      font-size: 12px;
+      color: #999;
+      font-weight: 600;
+    }
+
+    .vital-time {
+      font-size: 11px;
+      color: #bbb;
+      margin-top: 4px;
+    }
+
+    /* ============== CHART CONTAINER ============== */
+    .chart-container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+      position: relative;
+      height: 300px;
+    }
+
+    .chart-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--dark-text);
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 250px;
+    }
+
+    /* ============== STAFF INFO ============== */
+    .staff-info {
+      background: #f9f9f9;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 15px;
+    }
+
+    .staff-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--gray-border);
+    }
+
+    .staff-item:last-child {
+      margin-bottom: 0;
+      border-bottom: none;
+    }
+
+    .staff-label {
+      font-weight: 600;
+      color: #999;
+    }
+
+    .staff-value {
+      color: var(--dark-text);
+      font-weight: 500;
+    }
+
+    /* ============== FALL ALERT CONTAINER ============== */
+    .fall-alert-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 9999;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .fall-alert {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+      border: 3px solid #ff0000;
+      border-radius: 15px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 10px 40px rgba(255, 0, 0, 0.4);
+      animation: slideInShake 0.6s ease-out;
+      color: white;
+    }
+
+    @keyframes slideInShake {
+      0% { transform: translateX(450px); opacity: 0; }
+      50% { transform: translateX(-20px); }
+      75% { transform: translateX(10px); }
+      100% { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(450px); opacity: 0; }
+    }
+
+    .fall-alert.closing {
+      animation: slideOut 0.3s ease-in;
+    }
+
+    .fall-alert-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .fall-alert-icon {
+      font-size: 40px;
+      animation: iconPulse 0.8s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+
+    .fall-alert-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .fall-alert-body {
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    .alert-info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+    }
+
+    .alert-label {
+      font-weight: 600;
+      opacity: 0.9;
+    }
+
+    .alert-value {
+      font-weight: 700;
+    }
+
+    .fall-alert-footer {
+      display: flex;
+      gap: 10px;
+    }
+
+    .fall-btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-size: 14px;
+    }
+
+    .btn-acknowledge {
+      background: white;
+      color: #ff6b6b;
+    }
+
+    .btn-acknowledge:hover {
+      background: #f0f0f0;
+      transform: translateY(-2px);
+    }
+
+    .btn-close {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-close:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* ============== EMPTY STATE ============== */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+
+    .empty-state i {
+      font-size: 64px;
+      margin-bottom: 20px;
+      color: #ddd;
+    }
+
+    /* ============== LOADING ============== */
+    .loading-spinner {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(0, 177, 79, 0.2);
+      border-top-color: var(--primary-green);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ============== FOOTER ============== */
+    .footer {
+      background: #2c3e50;
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+      margin-top: auto;
+    }
+
+    /* ============== RESPONSIVE ============== */
+    @media (max-width: 768px) {
+      .main-container {
+        padding: 1rem;
+      }
+
+      .page-title {
+        font-size: 24px;
+      }
+
+      .patients-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .vitals-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .fall-alert-container {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+      }
+
+      .fall-alert {
+        padding: 15px;
+      }
+
+      .header-content {
+        padding: 0 1rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .header-content {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .logo-section h1 {
+        font-size: 18px;
+      }
+
+      .nav-section {
+        font-size: 12px;
+        gap: 10px;
+      }
+
+      .page-title {
+        font-size: 20px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stat-number {
+        font-size: 28px;
+      }
+
+      .patient-name {
+        font-size: 16px;
+      }
+
+      .vital-value {
+        font-size: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Fall Alert Container -->
+  <div class="fall-alert-container" id="fall-alert-container"></div>
+
+  <!-- Header -->
+  <header class="top-header">
+    <div class="header-content">
+      <div class="logo-section">
+        <i class="fas fa-chart-line"></i>
+        <h1>Darsinurse</h1>
+      </div>
+      <div class="nav-section">
+        <span><i class="fas fa-user-circle"></i> <%= nama_perawat %></span>
+        <span>|</span>
+        <a href="/"><i class="fas fa-home"></i> Dashboard</a>
+        <span>|</span>
+        <a href="/rooms"><i class="fas fa-door-open"></i> Ruangan</a>
+        <span>|</span>
+        <a href="/logout" class="logout-btn" onclick="return confirm('Yakin logout?')">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="main-container">
+    <h1 class="page-title"><i class="fas fa-bed"></i> Monitoring Rawat Inap</h1>
+    <p class="page-subtitle">Real-time monitoring vital signs pasien rawat inap</p>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-label">Total Pasien</div>
+        <div class="stat-number" id="total-patients">0</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+        <div class="stat-label">Fall Alert Aktif</div>
+        <div class="stat-number" id="fall-count">0</div>
+      </div>
+    </div>
+
+    <!-- Patients Grid -->
+    <div class="patients-grid" id="patients-container">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: #999;">Memuat data pasien...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2025 Darsinurse - Medical IoT Platform. All rights reserved.</p>
+  </footer>
+
+  <script>
+    // ========================================
+    // GLOBAL STATE
+    // ========================================
+    let audioContext = null;
+    let alertAudioBuffer = null;
+    let audioSource = null;
+    let isAudioPlaying = false;
+    let audioUnlocked = false;
+
+    const displayedAlerts = new Map();
+    let chartInstances = new Map();
+    const vitalsHistory = new Map();
+
+    // ========================================
+    // SOCKET.IO CONNECTION
+    // ========================================
+    const socket = io({
+      reconnection: true,
+      reconnectionDelay: 2000,
+      reconnectionAttempts: 10,
+      timeout: 10000
+    });
+
+    socket.on('connect', () => {
+      console.log('✓ Socket.IO connected:', socket.id);
+      loadPatientData();
+    });
+
+    socket.on('fall-alert', (alert) => {
+      console.log('🚨 FALL ALERT:', alert);
+      handleFallAlert(alert);
+      updatePatientCard(alert.emr_no);
+    });
+
+    socket.on('disconnect', () => {
+      console.warn('⚠️ Socket disconnected');
+    });
+
+    // ========================================
+    // AUDIO FUNCTIONS
+    // ========================================
+    const generateAlertSound = () => {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const duration = 0.5;
+      const buffer = ctx.createBuffer(1, duration * ctx.sampleRate, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      for (let i = 0; i < buffer.length; i++) {
+        const t = i / ctx.sampleRate;
+        const freq = Math.sin(t * 8) * 200 + 800;
+        data[i] = Math.sin(2 * Math.PI * freq * t) * 0.3;
+      }
+      return buffer;
+    };
+
+    const initAudio = () => {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        alertAudioBuffer = generateAlertSound();
+      } catch (err) {
+        console.error('❌ Audio init failed:', err);
+      }
+    };
+
+    const playSound = () => {
+      if (!audioContext || !alertAudioBuffer || isAudioPlaying) return;
+      try {
+        if (audioContext.state === 'suspended') audioContext.resume();
+        audioSource = audioContext.createBufferSource();
+        audioSource.buffer = alertAudioBuffer;
+        audioSource.loop = true;
+        audioSource.connect(audioContext.destination);
+        audioSource.start(0);
+        isAudioPlaying = true;
+      } catch (err) {
+        console.error('❌ Play error:', err);
+      }
+    };
+
+    const stopSound = () => {
+      if (audioSource) {
+        try {
+          audioSource.stop();
+          audioSource.disconnect();
+        } catch (err) {
+          console.warn('Audio stop error:', err);
+        }
+        audioSource = null;
+      }
+      isAudioPlaying = false;
+    };
+
+    // ========================================
+    // FALL ALERT HANDLER
+    // ========================================
+    function handleFallAlert(alert) {
+      if (!alert || !alert.nama_pasien) return;
+
+      const alertKey = `fall-${alert.id}`;
+      if (displayedAlerts.has(alertKey)) return;
+
+      displayedAlerts.set(alertKey, Date.now());
+      playSound();
+      showFallAlert(alert);
+
+      if (Notification.permission === 'granted') {
+        new Notification('🚨 FALL DETECTED!', {
+          body: `${alert.nama_pasien} - Room ${alert.room_id}`,
+          tag: alertKey,
+          requireInteraction: true,
+          vibrate: [200, 100, 200]
+        });
+      }
+
+      setTimeout(() => closeFallAlert(alert.id), 120000);
+    }
+
+    function showFallAlert(alert) {
+      const container = document.getElementById('fall-alert-container');
+      if (!container || document.getElementById(`fall-alert-${alert.id}`)) return;
+
+      const waktu = new Date(alert.waktu).toLocaleTimeString('id-ID');
+      const alertDiv = document.createElement('div');
+      alertDiv.className = 'fall-alert';
+      alertDiv.id = `fall-alert-${alert.id}`;
+      alertDiv.innerHTML = `
+        <div class="fall-alert-header">
+          <div class="fall-alert-icon">⚠️</div>
+          <h3 class="fall-alert-title">FALL DETECTED!</h3>
+        </div>
+        <div class="fall-alert-body">
+          <div class="alert-info-row">
+            <span class="alert-label">👤 Pasien:</span>
+            <span class="alert-value">${alert.nama_pasien}</span>
+          </div>
+          <div class="alert-info-row">
+            <span class="alert-label">🏥 Ruangan:</span>
+            <span class="alert-value">${alert.room_id}</span>
+          </div>
+          <div class="alert-info-row">
+            <span class="alert-label">💓 HR:</span>
+            <span class="alert-value">${alert.heart_rate || 'N/A'} bpm</span>
+          </div>
+          <div class="alert-info-row">
+            <span class="alert-label">🕐 Waktu:</span>
+            <span class="alert-value">${waktu}</span>
+          </div>
+        </div>
+        <div class="fall-alert-footer">
+          <button class="fall-btn btn-acknowledge" onclick="acknowledgeFallAlert(${alert.id})">
+            ✓ Acknowledge
+          </button>
+          <button class="fall-btn btn-close" onclick="closeFallAlert(${alert.id})">
+            ✕ Close
+          </button>
+        </div>
+      `;
+      container.insertBefore(alertDiv, container.firstChild);
+    }
+
+    function closeFallAlert(alertId) {
+      const alertDiv = document.getElementById(`fall-alert-${alertId}`);
+      if (!alertDiv) return;
+      alertDiv.classList.add('closing');
+      setTimeout(() => {
+        alertDiv.remove();
+        if (document.querySelectorAll('.fall-alert').length === 0) {
+          stopSound();
+        }
+      }, 300);
+    }
+
+    function acknowledgeFallAlert(alertId) {
+      const perawat = '<%= nama_perawat %>';
+      fetch(`/api/fall-detection/${alertId}/acknowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          acknowledged_by: perawat,
+          timestamp: new Date().toISOString()
+        })
+      }).catch(err => console.error('Acknowledge error:', err));
+      closeFallAlert(alertId);
+    }
+
+    // ========================================
+    // LOAD & DISPLAY PATIENT DATA
+    // ========================================
+    async function loadPatientData() {
+      try {
+        const [statsRes, patientsRes] = await Promise.all([
+          fetch('/api/rawat-inap/stats'),
+          fetch('/api/rawat-inap/patients')
+        ]);
+
+        const stats = await statsRes.json();
+        const patients = await patientsRes.json();
+
+        if (stats.success) {
+          document.getElementById('total-patients').textContent = stats.stats.totalPatients;
+          document.getElementById('fall-count').textContent = stats.stats.fallAlerts;
+        }
+
+        if (patients.success && patients.patients.length > 0) {
+          displayPatients(patients.patients);
+        } else {
+          const container = document.getElementById('patients-container');
+          container.innerHTML = '<div class="empty-state"><i class="fas fa-info-circle"></i><p>Tidak ada pasien rawat inap</p></div>';
+        }
+      } catch (err) {
+        console.error('❌ Load error:', err);
+      }
+    }
+
+    function displayPatients(patients) {
+      const container = document.getElementById('patients-container');
+      container.innerHTML = patients.map(p => `
+        <div class="patient-card ${p.fall_detected ? 'fall-alert' : ''}" id="card-${p.emr_no}">
+          <div class="patient-header">
+            <div>
+              <div class="patient-name">${p.nama}</div>
+              <div class="patient-meta">
+                <div class="meta-item"><span class="meta-label">EMR:</span> ${p.emr_no}</div>
+                <div class="meta-item"><span class="meta-label">Room:</span> ${p.room_id}</div>
+                <div class="meta-item"><span class="meta-label">Poli:</span> ${p.poli}</div>
+              </div>
+            </div>
+            ${p.fall_detected ? '<span class="fall-badge">🚨 FALL DETECTED</span>' : ''}
+          </div>
+
+          <div class="vitals-grid">
+            <div class="vital-box ${parseInt(p.heart_rate) > 100 ? 'warning' : ''}">
+              <div class="vital-label">💓 Heart Rate</div>
+              <div class="vital-value">${p.heart_rate}<span class="vital-unit">bpm</span></div>
+              <div class="vital-time">Update: ${formatTime(p.waktu_vital)}</div>
+            </div>
+            <div class="vital-box ${parseInt(p.respirasi) > 20 ? 'warning' : ''}">
+              <div class="vital-label">🌬️ Respirasi</div>
+              <div class="vital-value">${p.respirasi}<span class="vital-unit">/min</span></div>
+              <div class="vital-time">Nafas per menit</div>
+            </div>
+            <div class="vital-box">
+              <div class="vital-label">📏 Jarak Kasur</div>
+              <div class="vital-value">${p.jarak_kasur_cm}<span class="vital-unit">cm</span></div>
+              <div class="vital-time">Dari lantai</div>
+            </div>
+            <div class="vital-box">
+              <div class="vital-label">📋 ID Kunjungan</div>
+              <div class="vital-value">${p.id_kunjungan || '-'}</div>
+              <div class="vital-time">Status: ${p.status || 'aktif'}</div>
+            </div>
+          </div>
+
+          <div class="chart-container">
+            <div class="chart-title">📈 Heart Rate History (Realtime)</div>
+            <div class="chart-wrapper">
+              <canvas id="chart-${p.emr_no}"></canvas>
+            </div>
+          </div>
+
+          <div class="staff-info">
+            <div class="staff-item">
+              <span class="staff-label">👨‍⚕️ Perawat</span>
+              <span class="staff-value">${p.nama_perawat}</span>
+            </div>
+            <div class="staff-item">
+              <span class="staff-label">👨‍⚕️ Dokter</span>
+              <span class="staff-value">${p.nama_dokter}</span>
+            </div>
+            <div class="staff-item">
+              <span class="staff-label">📅 Lahir</span>
+              <span class="staff-value">${formatDate(p.tanggal_lahir)}</span>
+            </div>
+            <div class="staff-item">
+              <span class="staff-label">👥 Jenis Kelamin</span>
+              <span class="staff-value">${p.jenis_kelamin === 'M' ? 'Laki-laki' : 'Perempuan'}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      // Initialize charts
+      patients.forEach(p => {
+        initializeChart(p.emr_no);
+        vitalsHistory.set(p.emr_no, []);
+      });
+
+      // Setup auto-refresh untuk setiap pasien
+      setInterval(loadPatientData, 30000);
+    }
+
+    function initializeChart(emrNo) {
+      const canvasId = `chart-${emrNo}`;
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      const chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Heart Rate (bpm)',
+            data: [],
+            borderColor: '#00B14F',
+            backgroundColor: 'rgba(0, 177, 79, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: '#00B14F',
+            pointBorderColor: 'white',
+            pointBorderWidth: 2,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                font: { size: 12, weight: '600' },
+                color: '#666',
+                padding: 15
+              }
+            }
+          },
+          scales: {
+            y: {
+              min: 40,
+              max: 150,
+              ticks: {
+                color: '#999',
+                font: { size: 12 }
+              },
+              grid: {
+                color: 'rgba(0,0,0,0.05)',
+                drawBorder: false
+              }
+            },
+            x: {
+              ticks: {
+                color: '#999',
+                font: { size: 11 }
+              },
+              grid: {
+                display: false
+              }
+            }
+          }
+        }
+      });
+
+      chartInstances.set(emrNo, chartInstance);
+    }
+
+    function updateChart(emrNo, heartRate) {
+      const chartInstance = chartInstances.get(emrNo);
+      if (!chartInstance) return;
+
+      const now = new Date().toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+
+      const data = chartInstance.data;
+      data.labels.push(now);
+      data.datasets[0].data.push(heartRate);
+
+      // Keep only last 20 data points
+      if (data.labels.length > 20) {
+        data.labels.shift();
+        data.datasets[0].data.shift();
+      }
+
+      chartInstance.update('none');
+    }
+
+    function updatePatientCard(emrNo) {
+      fetch(`/api/rawat-inap/patients`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            const patient = data.patients.find(p => p.emr_no == emrNo);
+            if (patient) {
+              const card = document.getElementById(`card-${emrNo}`);
+              if (card) {
+                card.classList.toggle('fall-alert', patient.fall_detected);
+              }
+              if (patient.heart_rate) {
+                updateChart(emrNo, patient.heart_rate);
+              }
+            }
+          }
+        })
+        .catch(err => console.error('Update error:', err));
+    }
+
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
+    function formatTime(timestamp) {
+      if (!timestamp) return '-';
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('id-ID', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('id-ID', { 
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    }
+
+    // ========================================
+    // AUDIO UNLOCK & INITIALIZATION
+    // ========================================
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      initAudio();
+      if (audioContext) {
+        audioContext.resume().then(() => {
+          audioUnlocked = true;
+          console.log('✓ Audio unlocked');
+        });
+      }
+    }
+
+    ['click', 'keydown', 'touchstart'].forEach(event => {
+      document.addEventListener(event, unlockAudio, { once: true });
+    });
+
+    // ========================================
+    // PAGE INITIALIZATION
+    // ========================================
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('✓ Monitoring dashboard initialized');
+
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+
+      initAudio();
+      loadPatientData();
+
+      // Refresh setiap 30 detik
+      setInterval(loadPatientData, 30000);
+    });
+
+    window.addEventListener('beforeunload', () => {
+      stopSound();
+      if (audioContext) audioContext.close();
+    });
+  </script>
+</body>
+</html>
