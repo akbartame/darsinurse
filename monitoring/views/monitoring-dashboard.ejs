@@ -1991,10 +1991,20 @@ socket.on('vital-update', (data) => {
     updatePatientRowVitals(data.emr_no, data.vitals);
   }
   
-  // Update detail view if this patient is being viewed
+  // ✅ FIX: Update detail view if this patient is being viewed
   if (currentPatientEMR && currentPatientEMR == data.emr_no) {
     console.log('🎯 Updating detail view for current patient');
     updateVitalsDisplayRealtime(data.vitals);
+    updateChartsRealtime(data.vitals, data.waktu);
+  }
+});
+
+// ✅ NEW: Detailed vital update for current patient (REDUNDANT - keep for backup)
+socket.on('vital-update-detail', (data) => {
+  if (currentPatientEMR === data.emr_no) {
+    console.log('🎯 Detailed vital update for current patient');
+    updateVitalsDisplayRealtime(data.vitals);
+    updateChartsRealtime(data.vitals, data.waktu);
   }
 });
 
@@ -3154,10 +3164,13 @@ function updateChartsRealtime(vitals, timestamp) {
     // ============================================================
 
     function showDetailView(emr_no) {
+      console.log('👁️ Opening detail view for EMR:', emr_no);
       currentPatientEMR = emr_no;
+      console.log('✓ currentPatientEMR set to:', currentPatientEMR);
       
       // ✅ NEW: Join Socket.IO room for this patient
       socket.emit('join-patient-room', { emr_no: emr_no });
+      console.log('✓ Joined socket room for patient:', emr_no);
       
       document.getElementById('list-view').classList.remove('active');
       document.getElementById('detail-view').classList.add('active');
