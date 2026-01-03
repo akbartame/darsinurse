@@ -1343,7 +1343,11 @@ async function broadcastVitalUpdates() {
     `, [lastCheckedVitalTimestamp]);
     
     conn.release();
-    
+
+    if (newVitals.length > 0) {
+      console.log(`📊 [VITAL] Broadcasting ${newVitals.length} update(s)`); // ✅ ADD THIS
+    }
+
     if (newVitals.length === 0) return;
     
     // Update last checked timestamp

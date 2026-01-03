@@ -1595,6 +1595,21 @@
     max-height: 250px;
   }
 }
+  @keyframes pulseGreen {
+  0%, 100% {
+    transform: scale(1);
+    background-color: transparent;
+  }
+  50% {
+    transform: scale(1.05);
+    background-color: rgba(0, 255, 0, 0.2);
+  }
+}
+
+.vital-number {
+  transition: all 0.3s ease;
+}
+
   </style>
 </head>
 <body>
