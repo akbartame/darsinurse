@@ -1980,80 +1980,108 @@ socket.on('vital-update', (data) => {
     emr: data.emr_no,
     patient: data.nama_pasien,
     hr: data.vitals.heart_rate,
-    resp: data.vitals.respirasi
+    resp: data.vitals.respirasi,
+    fall: data.vitals.fall_detected
   });
   
-  // Update list view if visible
-  if (!currentPatientEMR) {
+  // Update list view if visible (not in detail view)
+  const listView = document.getElementById('list-view');
+  if (listView && listView.classList.contains('active')) {
+    console.log('🔄 Updating list view for EMR', data.emr_no);
     updatePatientRowVitals(data.emr_no, data.vitals);
   }
   
   // Update detail view if this patient is being viewed
-  if (currentPatientEMR === data.emr_no) {
+  if (currentPatientEMR && currentPatientEMR == data.emr_no) {
+    console.log('🎯 Updating detail view for current patient');
     updateVitalsDisplayRealtime(data.vitals);
   }
 });
 
-// ✅ NEW: Detailed vital update for current patient
-socket.on('vital-update-detail', (data) => {
-  if (currentPatientEMR === data.emr_no) {
-    console.log('🎯 Detailed vital update for current patient');
-    updateVitalsDisplayRealtime(data.vitals);
-    updateChartsRealtime(data.vitals, data.waktu);
-  }
-});
 
 /* ============================================================
    NEW FUNCTION: Update vitals display with animation
    ============================================================ */
 
 function updateVitalsDisplayRealtime(vitals) {
-  // Update Heart Rate
-  const hrCard = document.querySelector('.vital-card .vital-number');
-  if (hrCard && vitals.heart_rate) {
-    animateVitalUpdate(hrCard, vitals.heart_rate, getHeartRateClass(vitals.heart_rate));
+  console.log('🔄 Updating vitals display with:', vitals);
+  
+  // Get all vital cards
+  const vitalCards = document.querySelectorAll('#vitals-grid .vital-card');
+  
+  if (vitalCards.length === 0) {
+    console.warn('⚠️ No vital cards found in DOM');
+    return;
   }
   
-  // Update Respirasi
-  const respCards = document.querySelectorAll('.vital-card');
-  if (respCards[1] && vitals.respirasi) {
-    const respNumber = respCards[1].querySelector('.vital-number');
-    if (respNumber) {
-      animateVitalUpdate(respNumber, vitals.respirasi, getRespirasiClass(vitals.respirasi));
+  console.log(`📊 Found ${vitalCards.length} vital cards`);
+  
+  // Update Heart Rate (first card with heartbeat icon)
+  vitalCards.forEach((card, index) => {
+    const icon = card.querySelector('.fa-heartbeat');
+    if (icon && vitals.heart_rate) {
+      const numberEl = card.querySelector('.vital-number');
+      if (numberEl) {
+        console.log(`💓 Updating HR: ${numberEl.textContent} → ${vitals.heart_rate}`);
+        animateVitalUpdate(numberEl, vitals.heart_rate, getHeartRateClass(vitals.heart_rate));
+      }
     }
-  }
+  });
   
-  // Update Glukosa
-  if (respCards[2] && vitals.glukosa) {
-    const glukosaNumber = respCards[2].querySelector('.vital-number');
-    if (glukosaNumber) {
-      animateVitalUpdate(glukosaNumber, vitals.glukosa, '');
+  // Update Respirasi (card with lungs icon)
+  vitalCards.forEach((card, index) => {
+    const icon = card.querySelector('.fa-lungs');
+    if (icon && vitals.respirasi) {
+      const numberEl = card.querySelector('.vital-number');
+      if (numberEl) {
+        console.log(`🫁 Updating Resp: ${numberEl.textContent} → ${vitals.respirasi}`);
+        animateVitalUpdate(numberEl, vitals.respirasi, getRespirasiClass(vitals.respirasi));
+      }
     }
-  }
+  });
   
-  // Update Fall Status
-  if (respCards[3] && vitals.fall_detected !== undefined) {
-    const statusBadge = respCards[3].querySelector('.status-badge');
-    if (statusBadge) {
-      const newStatus = vitals.fall_detected === 1 ? 'DETECTED' : 'NORMAL';
-      const newClass = vitals.fall_detected === 1 ? 'status-detected' : 'status-normal';
+  // Update Glukosa (card with weight icon)
+  vitalCards.forEach((card, index) => {
+    const icon = card.querySelector('.fa-weight');
+    if (icon && vitals.glukosa) {
+      const numberEl = card.querySelector('.vital-number');
+      if (numberEl) {
+        console.log(`🍬 Updating Glucose: ${numberEl.textContent} → ${vitals.glukosa}`);
+        animateVitalUpdate(numberEl, vitals.glukosa, '');
+      }
+    }
+  });
+  
+  // Update Fall Status (card with user-injured icon)
+  vitalCards.forEach((card, index) => {
+    const icon = card.querySelector('.fa-user-injured');
+    if (icon && vitals.fall_detected !== undefined) {
+      const statusBadge = card.querySelector('.status-badge');
+      if (statusBadge) {
+        const newStatus = vitals.fall_detected === 1 ? 'DETECTED' : 'NORMAL';
+        const newClass = vitals.fall_detected === 1 ? 'status-detected' : 'status-normal';
+        
+        console.log(`🚨 Updating Fall Status: ${statusBadge.textContent} → ${newStatus}`);
+        
+        statusBadge.textContent = newStatus;
+        statusBadge.className = `status-badge ${newClass}`;
+        
+        // Pulse animation for fall status change
+        statusBadge.style.animation = 'pulse 0.5s ease-in-out';
+        setTimeout(() => {
+          statusBadge.style.animation = '';
+        }, 500);
+      }
       
-      statusBadge.textContent = newStatus;
-      statusBadge.className = `status-badge ${newClass}`;
-      
-      // Pulse animation for fall status change
-      statusBadge.style.animation = 'pulse 0.5s ease-in-out';
-      setTimeout(() => {
-        statusBadge.style.animation = '';
-      }, 500);
+      // Update timestamp
+      const timestampEl = card.querySelector('.vital-unit');
+      if (timestampEl) {
+        timestampEl.textContent = formatTime(new Date());
+      }
     }
-  }
+  });
   
-  // Update timestamp
-  const timestampEl = respCards[3]?.querySelector('.vital-unit');
-  if (timestampEl) {
-    timestampEl.textContent = formatTime(new Date());
-  }
+  console.log('✅ Vitals display updated');
 }
 
 /* ============================================================
@@ -2089,41 +2117,84 @@ function updatePatientRowVitals(emr_no, vitals) {
   const rows = document.querySelectorAll('.patients-table tbody tr');
   
   rows.forEach(row => {
-    const emrCell = row.querySelector('td:first-child strong');
-    if (emrCell && emrCell.textContent == emr_no) {
-      // Update Heart Rate
-      const hrCell = row.querySelector('td:nth-child(8) .vital-value');
-      if (hrCell && vitals.heart_rate) {
-        hrCell.textContent = vitals.heart_rate;
-        hrCell.className = `vital-value ${getHeartRateClass(vitals.heart_rate)}`;
-        
-        // Flash animation
-        hrCell.style.backgroundColor = 'rgba(0, 255, 0, 0.2)';
-        setTimeout(() => {
-          hrCell.style.backgroundColor = '';
-        }, 500);
+    const cells = row.querySelectorAll('td');
+    if (cells.length === 0) return;
+    
+    // Check if this row matches the EMR
+    const emrCell = cells[0].querySelector('strong');
+    if (!emrCell || emrCell.textContent.trim() != emr_no) return;
+    
+    console.log(`🎯 Updating row for EMR ${emr_no}`);
+    
+    // Update Heart Rate (column 4, index 3)
+    if (cells[3] && vitals.heart_rate) {
+      let hrSpan = cells[3].querySelector('.vital-value');
+      if (!hrSpan) {
+        cells[3].innerHTML = `<span class="vital-value">${vitals.heart_rate}</span>`;
+        hrSpan = cells[3].querySelector('.vital-value');
+      } else {
+        hrSpan.textContent = vitals.heart_rate;
+      }
+      hrSpan.className = `vital-value ${getHeartRateClass(vitals.heart_rate)}`;
+      
+      // Flash animation
+      cells[3].style.backgroundColor = 'rgba(0, 255, 0, 0.3)';
+      setTimeout(() => {
+        cells[3].style.backgroundColor = '';
+      }, 800);
+    }
+    
+    // Update Respirasi (column 5, index 4)
+    if (cells[4] && vitals.respirasi) {
+      let respSpan = cells[4].querySelector('.vital-value');
+      if (!respSpan) {
+        cells[4].innerHTML = `<span class="vital-value">${vitals.respirasi}</span>`;
+        respSpan = cells[4].querySelector('.vital-value');
+      } else {
+        respSpan.textContent = vitals.respirasi;
+      }
+      respSpan.className = `vital-value ${getRespirasiClass(vitals.respirasi)}`;
+      
+      // Flash animation
+      cells[4].style.backgroundColor = 'rgba(0, 255, 0, 0.3)';
+      setTimeout(() => {
+        cells[4].style.backgroundColor = '';
+      }, 800);
+    }
+    
+    // Update Jarak Kasur (column 6, index 5)
+    if (cells[5] && vitals.jarak_kasur_cm) {
+      cells[5].textContent = vitals.jarak_kasur_cm;
+      cells[5].style.backgroundColor = 'rgba(0, 255, 0, 0.3)';
+      setTimeout(() => {
+        cells[5].style.backgroundColor = '';
+      }, 800);
+    }
+    
+    // Update Fall Status (column 7, index 6)
+    if (cells[6] && vitals.fall_detected !== undefined) {
+      const isFallDetected = vitals.fall_detected === 1;
+      let fallBadge = cells[6].querySelector('.status-badge');
+      
+      if (!fallBadge) {
+        cells[6].innerHTML = `<span class="status-badge"></span>`;
+        fallBadge = cells[6].querySelector('.status-badge');
       }
       
-      // Update Respirasi
-      const respCell = row.querySelector('td:nth-child(9) .vital-value');
-      if (respCell && vitals.respirasi) {
-        respCell.textContent = vitals.respirasi;
-        respCell.className = `vital-value ${getRespirasiClass(vitals.respirasi)}`;
-        
-        // Flash animation
-        respCell.style.backgroundColor = 'rgba(0, 255, 0, 0.2)';
-        setTimeout(() => {
-          respCell.style.backgroundColor = '';
-        }, 500);
-      }
+      fallBadge.textContent = isFallDetected ? '🚨 TERDETEKSI' : '✓ NORMAL';
+      fallBadge.className = `status-badge ${isFallDetected ? 'status-detected' : 'status-normal'}`;
       
-      // Update Fall Status
-      const fallCell = row.querySelector('td:nth-child(11) .status-badge');
-      if (fallCell && vitals.fall_detected !== undefined) {
-        const isFallDetected = vitals.fall_detected === 1;
-        fallCell.textContent = isFallDetected ? '🚨 TERDETEKSI' : '✓ NORMAL';
-        fallCell.className = `status-badge ${isFallDetected ? 'status-detected' : 'status-normal'}`;
+      if (isFallDetected) {
+        cells[6].style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+        setTimeout(() => {
+          cells[6].style.backgroundColor = '';
+        }, 1000);
       }
+    }
+    
+    // Update timestamp (last column, index 9)
+    if (cells[9]) {
+      cells[9].innerHTML = `<small style="font-size: 11px;">${formatTime(new Date())}</small>`;
     }
   });
 }
@@ -3472,7 +3543,7 @@ function updateChartsRealtime(vitals, timestamp) {
       duration: 750,
       easing: 'easeInOutQuart'
     };
-    
+
     function getHeartRateClass(hr) {
       const rate = parseInt(hr);
       if (isNaN(rate)) return '';
