@@ -915,9 +915,9 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
   try {
     conn = await pool.getConnection();
     
-    // ✅ FIXED: Ambil HANYA data vital terakhir per pasien (tidak ada duplikasi)
+    // ✅ SUPER FIX: Ambil HANYA 1 kunjungan terakhir per pasien
     const [patients] = await conn.query(`
-      SELECT DISTINCT
+      SELECT 
         p.emr_no,
         p.nama,
         p.alamat,
@@ -925,34 +925,41 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
         p.jenis_kelamin,
         rd.room_id,
         p.poli,
-        k.emr_perawat,
-        k.emr_dokter,
-        k.id_kunjungan,
-        
-        -- ✅ Ambil hanya vital terakhir per pasien
-        (SELECT respirasi FROM vitals 
-         WHERE emr_no = p.emr_no 
-         ORDER BY waktu DESC LIMIT 1) as respirasi,
-         
-        (SELECT heart_rate FROM vitals 
-         WHERE emr_no = p.emr_no 
-         ORDER BY waktu DESC LIMIT 1) as heart_rate,
-         
-        (SELECT jarak_kasur_cm FROM vitals 
-         WHERE emr_no = p.emr_no 
-         ORDER BY waktu DESC LIMIT 1) as jarak_kasur_cm,
-         
-        (SELECT fall_detected FROM vitals 
-         WHERE emr_no = p.emr_no 
-         ORDER BY waktu DESC LIMIT 1) as fall_detected,
-         
-        (SELECT waktu FROM vitals 
-         WHERE emr_no = p.emr_no 
-         ORDER BY waktu DESC LIMIT 1) as waktu_vital
-         
+        latest_k.emr_perawat,
+        latest_k.emr_dokter,
+        latest_k.id_kunjungan,
+        latest_v.respirasi,
+        latest_v.heart_rate,
+        latest_v.jarak_kasur_cm,
+        latest_v.fall_detected,
+        latest_v.waktu as waktu_vital
       FROM room_device rd
       INNER JOIN pasien p ON rd.emr_no = p.emr_no
-      LEFT JOIN kunjungan k ON p.emr_no = k.emr_no AND k.status = 'aktif'
+      
+      -- ✅ Subquery: Ambil HANYA kunjungan terakhir yang aktif per pasien
+      LEFT JOIN (
+        SELECT k1.*
+        FROM kunjungan k1
+        INNER JOIN (
+          SELECT emr_no, MAX(tanggal_kunjungan) as max_date
+          FROM kunjungan
+          WHERE status = 'aktif'
+          GROUP BY emr_no
+        ) k2 ON k1.emr_no = k2.emr_no AND k1.tanggal_kunjungan = k2.max_date
+        WHERE k1.status = 'aktif'
+      ) latest_k ON p.emr_no = latest_k.emr_no
+      
+      -- ✅ Subquery: Ambil HANYA vital terakhir per pasien
+      LEFT JOIN (
+        SELECT v1.*
+        FROM vitals v1
+        INNER JOIN (
+          SELECT emr_no, MAX(waktu) as max_waktu
+          FROM vitals
+          GROUP BY emr_no
+        ) v2 ON v1.emr_no = v2.emr_no AND v1.waktu = v2.max_waktu
+      ) latest_v ON p.emr_no = latest_v.emr_no
+      
       WHERE rd.emr_no IS NOT NULL
       ORDER BY rd.room_id, p.emr_no
     `);
@@ -1009,7 +1016,7 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
     
     conn.release();
     
-    console.log(`✅ Loaded ${formattedPatients.length} unique inpatients with latest vitals`);
+    console.log(`✅ Loaded ${formattedPatients.length} unique inpatients (no duplicates)`);
     
     res.json({ 
       success: true, 
@@ -1022,7 +1029,6 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
     res.status(500).json({ success: false, error: err.message });
   }
 });
-
 // GET: Patient detail with real-time vitals
 app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, res) => {
   let conn;
