@@ -611,6 +611,7 @@ async function checkAndBroadcastFall(vitalsId, emrNo) {
   }
 }
 // ✅ FIXED: /simpan_data - SESUAI URUTAN KOLOM ASLI TABEL
+// ✅ FIXED: /simpan_data - TIDAK INSERT emr_perawat/emr_dokter ke vitals
 app.post('/simpan_data', requireLogin, async (req, res) => {
   const { id_kunjungan, emr_no, tipe_device, data } = req.body;  
   const idInt = parseInt(id_kunjungan);
@@ -624,6 +625,17 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
   try {
     conn = await pool.getConnection();
     
+    // ✅ Verifikasi kunjungan exists
+    const [kunjunganCheck] = await conn.query(
+      'SELECT id_kunjungan FROM kunjungan WHERE id_kunjungan = ? AND emr_no = ?',
+      [idInt, emrInt]
+    );
+    
+    if (kunjunganCheck.length === 0) {
+      conn.release();
+      return res.status(404).json({ error: 'Kunjungan tidak ditemukan atau EMR tidak sesuai' });
+    }
+    
     let vitalsData = {
       emr_no: emrInt,
       id_kunjungan: idInt,
@@ -636,8 +648,8 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
       diastolik: null,
       fall_detected: 0,
       tinggi_badan_cm: null,
-      bmi: null,
-      emr_perawat: req.session.emr_perawat,
+      bmi: null
+      // ✅ TIDAK ADA emr_perawat dan emr_dokter karena tidak ada di tabel vitals
     };
 
     // Parse data berdasarkan tipe device
@@ -676,7 +688,7 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
         break;
       
       case 'bmi':
-        vitalsData.bmi = parseInt(data);
+        vitalsData.bmi = parseFloat(data);
         break;
       
       case 'respirasi':
@@ -703,38 +715,36 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
         break;
     }
 
-    // ✅ PENTING: Urutan HARUS SAMA dengan urutan kolom di DESCRIBE vitals
+    // ✅ INSERT tanpa emr_perawat dan emr_dokter
     const [result] = await conn.query(
       `INSERT INTO vitals (
-        emr_no,              /* 2 */
-        id_kunjungan,        /* 3 */
-        waktu,               /* 4 - AUTO NOW() */
-        heart_rate,          /* 5 */
-        respirasi,           /* 6 */
-        jarak_kasur_cm,      /* 7 */
-        glukosa,             /* 8 */
-        berat_badan_kg,      /* 9 */
-        sistolik,            /* 10 */
-        diastolik,           /* 11 */
-        fall_detected,       /* 12 */
-        tinggi_badan_cm,     /* 13 */
-        bmi,                 /* 14 */
-        emr_perawat,         /* 15 */
-      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        emr_no,
+        id_kunjungan,
+        waktu,
+        heart_rate,
+        respirasi,
+        jarak_kasur_cm,
+        glukosa,
+        berat_badan_kg,
+        sistolik,
+        diastolik,
+        fall_detected,
+        tinggi_badan_cm,
+        bmi
+      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        vitalsData.emr_no,              // 1
-        vitalsData.id_kunjungan,        // 2
-        vitalsData.heart_rate,          // 3
-        vitalsData.respirasi,           // 4
-        vitalsData.jarak_kasur_cm,      // 5
-        vitalsData.glukosa,             // 6
-        vitalsData.berat_badan_kg,      // 7
-        vitalsData.sistolik,            // 8
-        vitalsData.diastolik,           // 9
-        vitalsData.fall_detected,       // 10
-        vitalsData.tinggi_badan_cm,     // 11
-        vitalsData.bmi,                 // 12
-        vitalsData.emr_perawat,         // 13
+        vitalsData.emr_no,
+        vitalsData.id_kunjungan,
+        vitalsData.heart_rate,
+        vitalsData.respirasi,
+        vitalsData.jarak_kasur_cm,
+        vitalsData.glukosa,
+        vitalsData.berat_badan_kg,
+        vitalsData.sistolik,
+        vitalsData.diastolik,
+        vitalsData.fall_detected,
+        vitalsData.tinggi_badan_cm,
+        vitalsData.bmi
       ]
     );
 
@@ -742,7 +752,6 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
 
     console.log(`✓ Data vitals ID ${vitalsId} berhasil disimpan untuk EMR ${emrInt}`);
 
-    // ✅ Check for fall detection
     await checkAndBroadcastFall(vitalsId, emrInt);
     
     conn.release();
@@ -754,10 +763,7 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
     });
   } catch (err) {
     if (conn) conn.release();
-    console.error('❌ ERROR di /simpan_data:');
-    console.error('   Message:', err.message);
-    console.error('   Code:', err.code);
-    console.error('   SQL State:', err.sqlState);
+    console.error('❌ ERROR di /simpan_data:', err.message);
     
     res.status(500).json({ 
       success: false,
@@ -1062,10 +1068,25 @@ io.on('connection', (socket) => {
       const [result] = await conn.query('INSERT INTO vitals SET ?', vitalsData);
       
       // Get patient info
-      const [patient] = await conn.query(
-        'SELECT p.nama, p.poli, rd.room_id, rd.device_id FROM pasien p LEFT JOIN room_device rd ON p.emr_no = rd.emr_no WHERE p.emr_no = ?',
-        [data.emr_no]
-      );
+      const [patient] = await conn.query(`
+        SELECT 
+          p.emr_no,
+          p.nama,
+          p.tanggal_lahir,
+          p.alamat,
+          p.jenis_kelamin,
+          p.poli,
+          rd.room_id,
+          k.id_kunjungan,
+          k.status as status_kunjungan,
+          k.keluhan,
+          k.emr_perawat, 
+          k.emr_dokter   
+        FROM pasien p
+        LEFT JOIN room_device rd ON p.emr_no = rd.emr_no
+        LEFT JOIN kunjungan k ON p.emr_no = k.emr_no AND k.status = 'aktif'
+        WHERE p.emr_no = ?
+      `, [emrInt]);
       
       conn.release();
       
