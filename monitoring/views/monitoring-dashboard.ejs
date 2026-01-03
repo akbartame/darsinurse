@@ -590,7 +590,7 @@
         }
 
         .stats-grid {
-          grid-template-columns: 1fr;
+          grid-template-columns: 1fr; /* 1 column on mobile */
           gap: 15px;
         }
 
@@ -1163,11 +1163,15 @@
   margin-bottom: 30px;
 }
 
+
 .chart-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-title {
@@ -1181,8 +1185,11 @@
 }
 
 .chart-card canvas {
-  max-height: 300px;
-  width: 100%;
+  flex: 1;
+  max-height: 280px;
+  width: 100% !important;
+  height: auto !important;
+  display: block;
 }
 
 /* ============================================================ */
@@ -1304,7 +1311,7 @@
 
 @media (max-width: 1024px) {
   .charts-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr); /* 2 columns on tablet */
   }
 
   .detail-grid {
@@ -1315,6 +1322,7 @@
 /* ============================================================ */
 /* RESPONSIVE - MOBILE (max-width: 768px) */
 /* ============================================================ */
+
 
 @media (max-width: 768px) {
   /* Search Box Mobile */
@@ -3329,19 +3337,39 @@ function updateChartsRealtime(vitals, timestamp) {
       `;
 
       const labels = vitals.map(v => formatChartTime(v.waktu));
-      
+  // ✅ IMPROVED: Chart options with better responsive settings
       const opts = {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false, // ✅ CHANGED: Allow custom height
         plugins: {
-          legend: { display: false },
-          tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.8)', padding: 12 }
+          legend: { 
+            display: true,
+            position: 'top',
+            labels: { boxWidth: 12, padding: 10, font: { size: 11 } }
+          },
+          tooltip: { 
+            backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+            padding: 12,
+            titleFont: { size: 13 },
+            bodyFont: { size: 12 }
+          }
         },
         scales: {
-          y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.05)' } },
-          x: { grid: { display: false } }
+          y: { 
+            beginAtZero: true, 
+            grid: { color: 'rgba(0, 0, 0, 0.05)' },
+            ticks: { font: { size: 11 } }
+          },
+          x: { 
+            grid: { display: false },
+            ticks: { 
+              font: { size: 10 },
+              maxRotation: 45,
+              minRotation: 0
+            }
+          }
         }
-      };
+      }
 
       // Heart Rate Chart
       charts.hr = new Chart(document.getElementById('heart-rate-chart'), {
@@ -3435,7 +3463,16 @@ function updateChartsRealtime(vitals, timestamp) {
     // ============================================================
     // HELPER FUNCTIONS
     // ============================================================
+    Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+    Chart.defaults.color = '#666';
+    Chart.defaults.borderColor = 'rgba(0, 0, 0, 0.1)';
 
+    // ✅ Set responsive animation
+    Chart.defaults.animation = {
+      duration: 750,
+      easing: 'easeInOutQuart'
+    };
+    
     function getHeartRateClass(hr) {
       const rate = parseInt(hr);
       if (isNaN(rate)) return '';

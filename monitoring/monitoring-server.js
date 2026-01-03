@@ -1318,13 +1318,14 @@ io.on('connection', (socket) => {
    ============================================================ */
 
 // ✅ NEW: Real-time vital signs broadcasting
-let lastCheckedVitalTimestamp = new Date();
+let lastCheckedVitalTimestamp = new Date(Date.now() - 60000); // Start from 1 minute ago
 
 async function broadcastVitalUpdates() {
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
     
-    // Get new vitals since last check
+    // ✅ IMPORTANT: Get ONLY new vitals since last check
     const [newVitals] = await conn.query(`
       SELECT 
         v.id, v.emr_no, v.waktu,
@@ -1343,19 +1344,19 @@ async function broadcastVitalUpdates() {
     `, [lastCheckedVitalTimestamp]);
     
     conn.release();
-
-    if (newVitals.length > 0) {
-      console.log(`📊 [VITAL] Broadcasting ${newVitals.length} update(s)`); // ✅ ADD THIS
-    }
-
-    if (newVitals.length === 0) return;
     
-    // Update last checked timestamp
+    if (newVitals.length === 0) {
+      // ✅ Uncomment this for debugging (will be very verbose)
+      // console.log('📊 [VITAL-POLL] No new data');
+      return;
+    }
+    
+    // ✅ Update last checked timestamp
     lastCheckedVitalTimestamp = new Date(newVitals[newVitals.length - 1].waktu);
     
-    console.log(`📊 Broadcasting ${newVitals.length} vital update(s)`);
+    console.log(`📊 [VITAL-POLL] Broadcasting ${newVitals.length} new vital(s)`);
     
-    // Broadcast each vital update
+    // ✅ Broadcast each vital update
     newVitals.forEach(vital => {
       const vitalData = {
         id: vital.id,
@@ -1377,23 +1378,46 @@ async function broadcastVitalUpdates() {
         }
       };
       
-      // Broadcast to all clients
+      console.log(`📤 [VITAL] EMR ${vital.emr_no}: HR=${vital.heart_rate}, Resp=${vital.respirasi}, Fall=${vital.fall_detected}`);
+      
+      // Broadcast to all clients in monitoring room
       io.to('monitoring-room').emit('vital-update', vitalData);
       
       // Also emit to specific patient room if someone is viewing details
       io.to(`patient-${vital.emr_no}`).emit('vital-update-detail', vitalData);
+      
+      // ✅ Broadcast fall alert if detected
+      if (vital.fall_detected === 1) {
+        const fallAlert = {
+          id: vital.id,
+          emr_no: vital.emr_no,
+          nama_pasien: vital.nama_pasien,
+          room_id: vital.room_id,
+          waktu: vital.waktu.toISOString(),
+          heart_rate: vital.heart_rate,
+          sistolik: vital.sistolik,
+          diastolik: vital.diastolik,
+          blood_pressure: (vital.sistolik && vital.diastolik) 
+            ? `${vital.sistolik}/${vital.diastolik}` 
+            : 'N/A'
+        };
+        
+        io.to('monitoring-room').emit('fall-alert', fallAlert);
+        console.log(`🚨 [FALL] Alert broadcasted for EMR ${vital.emr_no}`);
+      }
     });
     
   } catch (err) {
-    console.error('⚠️ Vital broadcast error:', err.message);
+    console.error('⚠️ [VITAL-POLL] Error:', err.message);
+    if (conn) conn.release();
   }
 }
 
-// Poll database every 2 seconds for new vitals
+// ✅ Start polling every 2 seconds
 const VITAL_CHECK_INTERVAL = 2000; // 2 seconds
 const vitalCheckIntervalId = setInterval(broadcastVitalUpdates, VITAL_CHECK_INTERVAL);
 
-console.log('✓ Real-time vital monitoring started (2s interval)');
+console.log('✅ Real-time vital monitoring started (polling every 2s)');
 
 /* ============================================================
    UPDATE SOCKET.IO CONNECTION HANDLER
