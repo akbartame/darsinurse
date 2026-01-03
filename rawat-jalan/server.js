@@ -606,37 +606,40 @@ async function checkAndBroadcastFall(vitalsId, emrNo) {
     return false;
   }
 }
+// ✅ FIXED: /simpan_data - SESUAI URUTAN KOLOM ASLI TABEL
 app.post('/simpan_data', requireLogin, async (req, res) => {
   const { id_kunjungan, emr_no, tipe_device, data, emr_dokter } = req.body;
   
   const idInt = parseInt(id_kunjungan);
   const emrInt = parseInt(emr_no);
-  const emrDokterInt = emr_dokter ? parseInt(emr_dokter) : null; // ✅ Parse dokter
+  const emrDokterInt = emr_dokter ? parseInt(emr_dokter) : null;
 
   if (isNaN(idInt) || isNaN(emrInt) || !tipe_device || !data) {
     return res.status(400).json({ error: 'Data tidak lengkap atau tidak valid' });
   }
 
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
     
     let vitalsData = {
       emr_no: emrInt,
       id_kunjungan: idInt,
-      emr_perawat: req.session.emr_perawat,
-      emr_dokter: emrDokterInt, 
       heart_rate: null,
-      sistolik: null,
-      diastolik: null,
       respirasi: null,
+      jarak_kasur_cm: null,
       glukosa: null,
       berat_badan_kg: null,
+      sistolik: null,
+      diastolik: null,
+      fall_detected: 0,
       tinggi_badan_cm: null,
       bmi: null,
-      jarak_kasur_cm: null,
-      fall_detected: 0
+      emr_perawat: req.session.emr_perawat,
+      emr_dokter: emrDokterInt
     };
 
+    // Parse data berdasarkan tipe device
     switch(tipe_device.toLowerCase()) {
       case 'glukosa':
       case 'glucose':
@@ -672,7 +675,7 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
         break;
       
       case 'bmi':
-        vitalsData.bmi = parseFloat(data);
+        vitalsData.bmi = parseInt(data);
         break;
       
       case 'respirasi':
@@ -699,58 +702,71 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
         break;
     }
 
+    // ✅ PENTING: Urutan HARUS SAMA dengan urutan kolom di DESCRIBE vitals
     const [result] = await conn.query(
       `INSERT INTO vitals (
-        emr_no, 
-        id_kunjungan,
-        emr_perawat,
-        emr_dokter,
-        waktu,
-        heart_rate, 
-        sistolik, 
-        diastolik,
-        respirasi, 
-        glukosa, 
-        berat_badan_kg, 
-        tinggi_badan_cm,
-        bmi,
-        jarak_kasur_cm,
-        fall_detected
-      ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        emr_no,              /* 2 */
+        id_kunjungan,        /* 3 */
+        waktu,               /* 4 - AUTO NOW() */
+        heart_rate,          /* 5 */
+        respirasi,           /* 6 */
+        jarak_kasur_cm,      /* 7 */
+        glukosa,             /* 8 */
+        berat_badan_kg,      /* 9 */
+        sistolik,            /* 10 */
+        diastolik,           /* 11 */
+        fall_detected,       /* 12 */
+        tinggi_badan_cm,     /* 13 */
+        bmi,                 /* 14 */
+        emr_perawat,         /* 15 */
+        emr_dokter           /* 16 */
+      ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        vitalsData.emr_no,
-        vitalsData.id_kunjungan,
-        vitalsData.emr_perawat,
-        vitalsData.emr_dokter,
-        vitalsData.heart_rate,
-        vitalsData.sistolik,
-        vitalsData.diastolik,
-        vitalsData.respirasi,
-        vitalsData.glukosa,
-        vitalsData.berat_badan_kg,
-        vitalsData.tinggi_badan_cm,
-        vitalsData.bmi,
-        vitalsData.jarak_kasur_cm,
-        vitalsData.fall_detected
+        vitalsData.emr_no,              // 1
+        vitalsData.id_kunjungan,        // 2
+        vitalsData.heart_rate,          // 3
+        vitalsData.respirasi,           // 4
+        vitalsData.jarak_kasur_cm,      // 5
+        vitalsData.glukosa,             // 6
+        vitalsData.berat_badan_kg,      // 7
+        vitalsData.sistolik,            // 8
+        vitalsData.diastolik,           // 9
+        vitalsData.fall_detected,       // 10
+        vitalsData.tinggi_badan_cm,     // 11
+        vitalsData.bmi,                 // 12
+        vitalsData.emr_perawat,         // 13
+        vitalsData.emr_dokter           // 14
       ]
     );
+
     const vitalsId = result.insertId;
 
-    conn.release();
+    console.log(`✓ Data vitals ID ${vitalsId} berhasil disimpan untuk EMR ${emrInt}`);
 
+    // ✅ Check for fall detection
     await checkAndBroadcastFall(vitalsId, emrInt);
     
+    conn.release();
+
     res.json({
       success: true,
       id: vitalsId,
       message: "Data berhasil disimpan"
     });
   } catch (err) {
-    console.error('❌ Save data error:', err);
-    res.status(500).json({ error: 'Database error: ' + err.message });
+    if (conn) conn.release();
+    console.error('❌ ERROR di /simpan_data:');
+    console.error('   Message:', err.message);
+    console.error('   Code:', err.code);
+    console.error('   SQL State:', err.sqlState);
+    
+    res.status(500).json({ 
+      success: false,
+      error: 'Database error: ' + err.message,
+      code: err.code
+    });
   }
 });
-
 app.get('/api/vitals/kunjungan/:id_kunjungan', requireLogin, async (req, res) => {
   const idInt = parseInt(req.params.id_kunjungan);
   if (isNaN(idInt)) {
