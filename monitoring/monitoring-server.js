@@ -739,10 +739,13 @@ app.get('/api/measurements/today', requireAdminOrPerawat, async (req, res) => {
         v.jarak_kasur_cm, v.fall_detected,
         pas.nama as nama_pasien, pas.emr_no,
         pr.nama as nama_perawat, k.id_kunjungan
+        k.id_kunjungan,
+        k.emr_perawat,
+        k.emr_dokter  
        FROM vitals v
        JOIN pasien pas ON v.emr_no = pas.emr_no
-       LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
        LEFT JOIN kunjungan k ON v.id_kunjungan = k.id_kunjungan
+       LEFT JOIN perawat pr ON v.emr_perawat = pr.emr_perawat
        WHERE v.waktu >= ? AND v.waktu < ? ${whereClause}
        ORDER BY v.waktu DESC
        LIMIT 100`,
