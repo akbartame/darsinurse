@@ -630,33 +630,55 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     
-    const whereClause = req.session.role === 'admin' 
-      ? '' 
-      : `AND emr_perawat = ${req.session.emr_perawat}`;
+    // ✅ FIX: Gunakan parameterized query yang benar
+    let visitQuery = `SELECT COUNT(*) as total FROM kunjungan 
+                       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`;
+    let visitParams = [today, tomorrow];
     
-    const [visits] = await conn.query(
-      `SELECT COUNT(*) as total FROM kunjungan 
-       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
-      [today, tomorrow]
-    );
+    // Jika bukan admin, tambahkan filter perawat
+    if (req.session.role !== 'admin') {
+      visitQuery += ` AND emr_perawat = ?`;
+      visitParams.push(req.session.emr_perawat);
+    }
     
-    const [patients] = await conn.query(
-      `SELECT COUNT(DISTINCT emr_no) as total FROM kunjungan 
-       WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
-      [today, tomorrow]
-    );
+    const [visits] = await conn.query(visitQuery, visitParams);
     
-    const [measurements] = await conn.query(
-      `SELECT COUNT(*) as total FROM vitals 
-       WHERE waktu >= ? AND waktu < ? ${whereClause}`,
-      [today, tomorrow]
-    );
+    // ===== VISITS UNIK =====
+    let patientQuery = `SELECT COUNT(DISTINCT emr_no) as total FROM kunjungan 
+                        WHERE tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`;
+    let patientParams = [today, tomorrow];
     
-    const [active] = await conn.query(
-      `SELECT COUNT(*) as total FROM kunjungan 
-       WHERE status = 'aktif' AND tanggal_kunjungan >= ? AND tanggal_kunjungan < ? ${whereClause}`,
-      [today, tomorrow]
-    );
+    if (req.session.role !== 'admin') {
+      patientQuery += ` AND emr_perawat = ?`;
+      patientParams.push(req.session.emr_perawat);
+    }
+    
+    const [patients] = await conn.query(patientQuery, patientParams);
+    
+    // ===== MEASUREMENTS =====
+    let measurementQuery = `SELECT COUNT(*) as total FROM vitals v
+                            LEFT JOIN kunjungan k ON v.id_kunjungan = k.id_kunjungan
+                            WHERE v.waktu >= ? AND v.waktu < ?`;
+    let measurementParams = [today, tomorrow];
+    
+    if (req.session.role !== 'admin') {
+      measurementQuery += ` AND k.emr_perawat = ?`;
+      measurementParams.push(req.session.emr_perawat);
+    }
+    
+    const [measurements] = await conn.query(measurementQuery, measurementParams);
+    
+    // ===== ACTIVE VISITS =====
+    let activeQuery = `SELECT COUNT(*) as total FROM kunjungan 
+                       WHERE status = 'aktif' AND tanggal_kunjungan >= ? AND tanggal_kunjungan < ?`;
+    let activeParams = [today, tomorrow];
+    
+    if (req.session.role !== 'admin') {
+      activeQuery += ` AND emr_perawat = ?`;
+      activeParams.push(req.session.emr_perawat);
+    }
+    
+    const [active] = await conn.query(activeQuery, activeParams);
     
     conn.release();
     
