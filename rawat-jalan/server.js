@@ -1471,7 +1471,7 @@ app.get('/api/visits/all', requireLogin, async (req, res) => {
         p.poli,
         pr.nama as nama_perawat
       FROM kunjungan k
-      LEFT JOIN pasien p ON k.emr_no = p.emr_no
+      INNER JOIN pasien p ON k.emr_no = p.emr_no
       LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
     `;
     
