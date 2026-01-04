@@ -1695,10 +1695,11 @@
   align-items: end;
   padding: 15px;
   background: linear-gradient(135deg, #f9f9f9, #ffffff);
-  border-radius: 10px 10px 0 0;  /* ← Hanya sudut atas */
+  border-radius: 10px 10px 0 0;
   border: 1px solid #e0e0e0;
-  border-bottom: none;  /* ← Hilangkan border bawah */
+  border-bottom: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  overflow: hidden;  /* ← TAMBAH INI */
 }
 
 /* ✅ Laptop: lebih compact */
@@ -1715,7 +1716,7 @@
   }
   
   .filter-btn {
-    padding: 8px 12px;
+    padding: 8px 10px;
     font-size: 12px;
     min-height: 36px;
   }
@@ -1761,6 +1762,9 @@
   background: white;
   transition: all 0.3s;
   font-family: 'Segoe UI', sans-serif;
+  width: 100%;  /* ← PASTIKAN INI ADA */
+  max-width: 100%;  /* ← TAMBAH INI */
+  box-sizing: border-box;  /* ← TAMBAH INI */
 }
 
 .filter-input:focus {
@@ -1773,7 +1777,7 @@
   background: var(--primary-green);
   color: white;
   border: none;
-  padding: 10px 18px;
+  padding: 10px 14px;  /* ← KURANGI dari 18px jadi 14px */
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
@@ -1786,6 +1790,7 @@
   white-space: nowrap;
   min-height: 40px;
   box-shadow: 0 2px 8px rgba(0, 177, 79, 0.2);
+  max-width: 150px;  /* ← TAMBAH INI */
 }
 
 .filter-btn:hover {
