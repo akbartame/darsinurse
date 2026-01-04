@@ -128,11 +128,51 @@
     .user-info a i {
       font-size: 14px;
     }
+
     .main-container {
       padding-top: 15px !important;
       flex: 1;
       min-height: calc(100vh - 80px);
     }
+
+    /* ✅ Prevent content from being too wide */
+    @media (min-width: 1200px) {
+      .tab-content {
+        max-width: 100%;
+      }
+      
+      .page-header {
+        margin-bottom: 25px;
+      }
+      
+      .page-title {
+        font-size: 36px;
+      }
+    }
+
+    @media (min-width: 1400px) {
+      .data-container {
+        max-width: 100%;
+      }
+    }
+
+    /* ✅ Laptop: lebih besar padding */
+    @media (min-width: 1200px) {
+      .main-container {
+        padding: 20px 30px !important;
+        max-width: 1600px;
+        margin: 0 auto;
+        width: 100%;
+      }
+    }
+
+    @media (min-width: 1920px) {
+      .main-container {
+        padding: 25px 40px !important;
+        max-width: 1800px;
+      }
+    }
+
     .page-header {
       margin-bottom: 30px;
     }
@@ -1008,6 +1048,45 @@
   margin-bottom: 30px;
 }
 
+#table-container {
+  padding: 20px;
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* ✅ Laptop: lebih besar */
+@media (min-width: 1200px) {
+  #table-container {
+    max-height: 700px;
+    padding: 20px;
+  }
+  
+  .data-table {
+    font-size: 13px;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 12px 10px;
+  }
+}
+
+@media (min-width: 1400px) {
+  #table-container {
+    max-height: 750px;
+  }
+  
+  .data-table {
+    font-size: 14px;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 14px 12px;
+  }
+}
+
 .table-header {
   background: linear-gradient(135deg, var(--primary-green), var(--secondary-green));
   color: white;
@@ -1085,6 +1164,21 @@
   margin-bottom: 30px;
 }
 
+/* ✅ Laptop: 3 kolom untuk info cards */
+@media (min-width: 1200px) {
+  .detail-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .detail-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+}
+
 .info-card {
   background: white;
   border-radius: 12px;
@@ -1131,12 +1225,26 @@
 /* ============================================================ */
 /* VITAL SIGNS CARDS & GRID */
 /* ============================================================ */
-
 .vital-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 15px;
   margin-bottom: 20px;
+}
+
+/* ✅ Laptop: 4-5 kolom */
+@media (min-width: 1200px) {
+  .vital-cards-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .vital-cards-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+  }
 }
 
 .vital-card {
@@ -1193,15 +1301,68 @@
   margin-bottom: 30px;
 }
 
+/* ✅ Perbaikan: Laptop 1-2 kolom, bukan auto-fit */
+@media (min-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1920px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 1600px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
 
 .chart-card {
   background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-  min-height: 350px;
+  min-height: 380px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-card canvas {
+  flex: 1;
+  max-height: 300px;
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+/* ✅ Laptop: lebih compact */
+@media (min-width: 1200px) {
+  .chart-card {
+    min-height: 350px;
+    padding: 18px;
+  }
+  
+  .chart-card canvas {
+    max-height: 280px;
+  }
+  
+  .chart-title {
+    font-size: 15px;
+    margin-bottom: 12px;
+  }
+}
+
+/* ✅ 4K: slightly larger */
+@media (min-width: 1920px) {
+  .chart-card {
+    min-height: 400px;
+    padding: 20px;
+  }
+  
+  .chart-card canvas {
+    max-height: 320px;
+  }
 }
 
 .chart-title {
@@ -1661,6 +1822,43 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
+/* ✅ Laptop: lebih compact */
+@media (min-width: 1200px) {
+  .chart-filter-controls {
+    grid-template-columns: 1fr 1fr 150px 150px 150px;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .filter-input {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  
+  .filter-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .chart-filter-controls {
+    grid-template-columns: 1fr 1fr 160px 160px 160px;
+    gap: 12px;
+  }
+  
+  .filter-input {
+    padding: 9px 11px;
+    font-size: 13px;
+  }
+  
+  .filter-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+  }
+}
+
 .filter-group {
   display: flex;
   flex-direction: column;
@@ -1739,6 +1937,35 @@
   background: #f0f8f7;
   border-radius: 8px;
   margin-bottom: 20px;
+}
+
+/* ✅ Laptop: inline, tidak wrap */
+@media (min-width: 1200px) {
+  .quick-filters {
+    flex-wrap: nowrap;
+    gap: 6px;
+    padding: 10px 12px;
+    justify-content: center;
+  }
+  
+  .quick-filter-btn {
+    flex: 0 1 auto;
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .quick-filters {
+    gap: 8px;
+    padding: 12px 15px;
+    justify-content: flex-start;
+  }
+  
+  .quick-filter-btn {
+    padding: 7px 13px;
+    font-size: 12px;
+  }
 }
 
 .quick-filter-btn {
