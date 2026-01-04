@@ -1294,6 +1294,7 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
+  grid-column: 1 / -1; /* Span semua kolom */
   margin-bottom: 30px;
   margin-top: 0;
   padding: 20px;
@@ -1302,15 +1303,6 @@
   border: 1px solid #e0e0e0;
   border-top: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-/* Laptop: 2 kolom */
-@media (min-width: 1200px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 18px;
-    padding: 20px;
-  }
 }
 
 /* 4K: 2 kolom dengan gap lebih besar */
@@ -1701,6 +1693,8 @@
   border: 1px solid #e0e0e0;
   border-bottom: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  grid-column: 1 / -1; /* Span semua kolom */
+  width: 100%;
 }
 
 /* ✅ Baris filter inputs dalam 1 row */
@@ -1843,6 +1837,122 @@
   .quick-filter-btn {
     flex: 1;
     min-width: 70px;
+  }
+}
+/* ========================================================== */
+/* ✅ FINAL FIX: PAKSA LAYOUT FILTER + CHARTS (PRIORITAS TERTINGGI) */
+/* ========================================================== */
+
+/* Container utama: PAKSA flex column */
+#charts-container,
+#jalan-charts-container {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Filter controls: PAKSA di atas, full width */
+.chart-filter-controls {
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  order: -1 !important;
+  margin: 0 !important;
+  padding: 15px !important;
+  background: linear-gradient(135deg, #f9f9f9, #ffffff) !important;
+  border-radius: 10px 10px 0 0 !important;
+  border: 1px solid #e0e0e0 !important;
+  border-bottom: none !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+}
+
+/* Baris filter input */
+.filter-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  align-items: flex-end !important;
+  width: 100% !important;
+}
+
+/* Quick filters di bawah */
+.quick-filters {
+  display: flex !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  padding-top: 10px !important;
+  border-top: 1px solid #e0e0e0 !important;
+  width: 100% !important;
+}
+
+/* Charts grid: PAKSA di bawah filter */
+.charts-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 20px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 20px !important;
+  background: white !important;
+  border-radius: 0 0 10px 10px !important;
+  border: 1px solid #e0e0e0 !important;
+  border-top: none !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+  order: 1 !important;
+}
+
+/* Chart cards */
+.chart-card {
+  width: 100% !important;
+  min-height: 380px !important;
+}
+
+/* ===== RESPONSIVE ===== */
+
+/* Tablet: 2 kolom */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Laptop: 2 kolom */
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 18px !important;
+  }
+}
+
+/* Desktop besar: 3 kolom */
+@media (min-width: 1600px) {
+  .charts-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 22px !important;
+  }
+}
+
+/* Mobile: 1 kolom */
+@media (max-width: 767px) {
+  .charts-grid {
+    grid-template-columns: 1fr !important;
+    padding: 15px !important;
+  }
+  
+  .filter-row {
+    flex-direction: column !important;
+  }
+  
+  .filter-group {
+    width: 100% !important;
+  }
+  
+  .filter-btn {
+    width: 100% !important;
   }
 }
   </style>
