@@ -18,7 +18,9 @@
     "express-session": "^1.17.3",
     "mysql2": "^3.6.5",
     "socket.io": "^4.6.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "socket.io-client": "^4.6.0",
+    "mqtt": "^5.3.4"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
