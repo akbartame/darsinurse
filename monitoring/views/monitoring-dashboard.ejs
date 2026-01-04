@@ -1916,7 +1916,34 @@
     border-radius: 0 0 10px 10px;
   }
 }
+/* ============================================================ */
+/* CHARTS GRID RESPONSIVE */
+/* ============================================================ */
 
+/* Laptop: 2 kolom */
+@media (min-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+}
+
+/* 4K: tetap 2 kolom tapi gap lebih besar */
+@media (min-width: 1920px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+}
+
+/* Mobile: 1 kolom */
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+    padding: 15px;
+    border-radius: 0 0 10px 10px;
+  }
+}
   </style>
 </head>
 <body>
