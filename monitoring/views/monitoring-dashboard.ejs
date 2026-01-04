@@ -1626,6 +1626,20 @@
 
   <!-- Header -->
 <!-- Header -->
+ <header class="top-header">
+  <!-- Existing code -->
+  <div id="mqtt-status-badge" style="
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: #f0f0f0;
+    font-weight: 600;
+    font-size: 12px;
+  ">🟡 Connecting...</div>
+</header>
+
   <header class="top-header">
     <div class="container-fluid">
       <div class="d-flex justify-content-between align-items-center flex-wrap">
@@ -1889,9 +1903,8 @@
     let isAudioPlaying = false; // ✅ NEW
     let allPatients = [];
     let currentPatientEMR = null;
+    let currentPatientRoom = null;  // ✅ BARU
     let charts = {};
-
-
 
     // ============================================
     // AUDIO INITIALIZATION
@@ -2008,7 +2021,103 @@ socket.on('vital-update-detail', (data) => {
   }
 });
 
+socket.on('mqtt-vital-update', (data) => {
+  console.log('📊 MQTT Vital Update:', {
+    room: data.room_id,
+    hr: data.vitals.heart_rate,
+    resp: data.vitals.respirasi,
+    distance: data.vitals.jarak_kasur_cm,
+    fall: data.vitals.fall_detected
+  });
+  
+  // ✅ Update list view (tabel Rawat Inap)
+  updateRoomVitalsInTable(data.room_id, data.vitals);
+  
+  // ✅ Update detail view kalau sedang membuka pasien di room itu
+  if (currentPatientRoom && currentPatientRoom === data.room_id) {
+    console.log('🎯 Updating detail view for room:', data.room_id);
+    updateVitalsDisplayRealtime(data.vitals);
+    updateChartsRealtime(data.vitals, data.waktu);
+  }
+});
 
+// Handle MQTT connection status
+socket.on('mqtt-status', (status) => {
+  console.log('🔌 MQTT Status:', status);
+  const badge = document.getElementById('mqtt-status-badge');
+  if (badge) {
+    badge.textContent = status.connected ? '🟢 Connected' : '🔴 Disconnected';
+    badge.style.color = status.connected ? '#27ae60' : '#e74c3c';
+  }
+});
+
+
+function updateRoomVitalsInTable(room_id, vitals) {
+  console.log(`🔄 Updating table for room: ${room_id}`);
+  
+  const rows = document.querySelectorAll('.patients-table tbody tr');
+  
+  rows.forEach(row => {
+    const roomCell = row.querySelectorAll('td')[5]; // Column Ruangan
+    if (!roomCell) return;
+    
+    const roomText = roomCell.textContent.trim();
+    
+    if (roomText === room_id) {
+      console.log(`✓ Found row for room ${room_id}`);
+      const cells = row.querySelectorAll('td');
+      
+      // Update HR (column 7, index 7)
+      if (cells[7] && vitals.heart_rate) {
+        cells[7].innerHTML = `<span class="vital-value ${getHeartRateClass(vitals.heart_rate)}">${vitals.heart_rate}</span>`;
+        cells[7].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+        setTimeout(() => cells[7].style.backgroundColor = '', 800);
+      }
+      
+      // Update Respirasi (column 8, index 8)
+      if (cells[8] && vitals.respirasi) {
+        cells[8].innerHTML = `<span class="vital-value ${getRespirasiClass(vitals.respirasi)}">${vitals.respirasi}</span>`;
+        cells[8].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+        setTimeout(() => cells[8].style.backgroundColor = '', 800);
+      }
+      
+      // Update Jarak Kasur (column 9, index 9)
+      if (cells[9] && vitals.jarak_kasur_cm !== undefined) {
+        cells[9].textContent = vitals.jarak_kasur_cm;
+        cells[9].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+        setTimeout(() => cells[9].style.backgroundColor = '', 800);
+      }
+      
+      // Update Fall Status (column 10, index 10)
+      if (cells[10] && vitals.fall_detected !== undefined) {
+        const isFall = vitals.fall_detected === 1;
+        cells[10].innerHTML = `<span class="status-badge ${isFall ? 'status-detected' : 'status-normal'}">${isFall ? '🚨 TERDETEKSI' : '✓ NORMAL'}</span>`;
+        
+        if (isFall) {
+          cells[10].style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+          setTimeout(() => cells[10].style.backgroundColor = '', 1000);
+          
+          // Trigger fall alert jika distance === 0
+          handleFallAlert({
+            id: Math.random(),
+            room_id: room_id,
+            emr_no: row.querySelectorAll('td')[0].textContent,
+            nama_pasien: row.querySelectorAll('td')[1].textContent,
+            heart_rate: vitals.heart_rate,
+            blood_pressure: 'N/A',
+            waktu: new Date().toISOString()
+          });
+        }
+      }
+      
+      // Update timestamp (last column)
+      const lastCell = cells[cells.length - 1];
+      if (lastCell) {
+        lastCell.innerHTML = `<small style="font-size: 11px;">${formatTime(new Date())}</small>`;
+      }
+    }
+  });
+}
 /* ============================================================
    NEW FUNCTION: Update vitals display with animation
    ============================================================ */
@@ -3166,11 +3275,17 @@ function updateChartsRealtime(vitals, timestamp) {
     function showDetailView(emr_no) {
       console.log('👁️ Opening detail view for EMR:', emr_no);
       currentPatientEMR = emr_no;
-      console.log('✓ currentPatientEMR set to:', currentPatientEMR);
       
-      // ✅ NEW: Join Socket.IO room for this patient
-      socket.emit('join-patient-room', { emr_no: emr_no });
-      console.log('✓ Joined socket room for patient:', emr_no);
+      // ✅ Get room_id dari table
+      const row = document.querySelector(`tr:has(td:contains('${emr_no}'))`);
+      if (row) {
+        const roomCell = row.querySelectorAll('td')[5];
+        currentPatientRoom = roomCell.textContent.trim();
+        console.log('📍 Room:', currentPatientRoom);
+        
+        // Join room untuk updates
+        socket.emit('join-patient-room', { room_id: currentPatientRoom });
+      }
       
       document.getElementById('list-view').classList.remove('active');
       document.getElementById('detail-view').classList.add('active');

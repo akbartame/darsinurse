@@ -14,6 +14,7 @@ const socketIo = require('socket.io');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
 const { io: io_client } = require('socket.io-client');
+const mqtt = require('mqtt');
 
 const app = express();
 const PORT = process.env.MONITORING_PORT || 5000;
@@ -96,6 +97,79 @@ pool.on('error', (err) => {
 pool.on('connection', (connection) => {
   console.log('✓ New pool connection established');
 });
+
+const mqttClient = mqtt.connect('mqtt://103.106.72.181:1883', {
+  username: 'MEDLOC',
+  password: 'MEDLOC',
+  clientId: `darsinurse-gateway-${Math.random().toString(16).substr(2, 8)}`,
+  reconnectPeriod: 5000,
+  connectTimeout: 10000
+});
+
+let mqttConnected = false;
+
+mqttClient.on('connect', () => {
+  console.log('✅ MQTT Connected to 103.106.72.181:1883');
+  mqttConnected = true;
+  
+  // Subscribe ke semua device
+  mqttClient.subscribe('rsi/v1/device/+/state', (err) => {
+    if (err) {
+      console.error('❌ MQTT Subscribe error:', err);
+    } else {
+      console.log('✓ Subscribed to: rsi/v1/device/+/state');
+    }
+  });
+});
+
+mqttClient.on('message', (topic, message) => {
+  try {
+    const payload = JSON.parse(message.toString());
+    
+    console.log('📊 MQTT Message:', {
+      topic: topic,
+      device_id: payload.device_id,
+      room_id: payload.room_id,
+      heart_rate: payload.avg_heart_rate,
+      breath_rate: payload.avg_breath_rate,
+      distance: payload.distance,
+      timestamp: payload.timestamp
+    });
+    
+    // ✅ Broadcast ke semua Socket.IO clients (monitoring dashboard)
+    io.emit('mqtt-vital-update', {
+      device_id: payload.device_id,
+      room_id: payload.room_id,
+      vitals: {
+        heart_rate: payload.avg_heart_rate,
+        respirasi: payload.avg_breath_rate,
+        jarak_kasur_cm: payload.distance,
+        fall_detected: payload.distance === 0 ? 1 : 0
+      },
+      waktu: payload.timestamp,
+      source: 'mqtt'
+    });
+    
+  } catch (err) {
+    console.error('❌ MQTT Parse error:', err);
+  }
+});
+
+mqttClient.on('error', (err) => {
+  console.error('❌ MQTT Error:', err);
+  mqttConnected = false;
+});
+
+mqttClient.on('disconnect', () => {
+  console.warn('⚠️ MQTT Disconnected');
+  mqttConnected = false;
+});
+
+mqttClient.on('reconnect', () => {
+  console.log('🔄 MQTT Reconnecting...');
+});
+
+
 
 /* ============================================================
    EXPRESS CONFIGURATION (CORRECT ORDER!)
@@ -1362,7 +1436,7 @@ rawajalanSocket.on('new-fall-alert', (alert) => {
 
 io.on('connection', (socket) => {
   console.log('🔌 Client connected:', socket.id);
-  
+
   socket.join('monitoring-room');
   
   socket.emit('connection-status', {
@@ -1375,6 +1449,24 @@ io.on('connection', (socket) => {
       acknowledgedBy: data.acknowledgedBy,
       timestamp: new Date().toISOString()
     });
+  });
+
+  socket.emit('mqtt-status', {
+    connected: mqttConnected,
+    broker: '103.106.72.181:1883'
+  });
+  
+  // Handle join room untuk patient detail
+  socket.on('join-patient-room', (data) => {
+    const room = `room-${data.room_id}`;
+    socket.join(room);
+    console.log(`✓ Client joined room: ${room}`);
+  });
+  
+  socket.on('leave-patient-room', (data) => {
+    const room = `room-${data.room_id}`;
+    socket.leave(room);
+    console.log(`✓ Client left room: ${room}`);
   });
   
   socket.on('disconnect', () => {
