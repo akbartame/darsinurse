@@ -1505,6 +1505,154 @@ app.get('/api/patients/outpatient/:emrNo/vitals/chart', requireAdminOrPerawat, a
     res.status(500).json({ error: err.message });
   }
 });
+
+
+/* ============================================================
+   RAWAT JALAN MONITORING API
+   ============================================================ */
+
+// GET: Visit detail by id_kunjungan
+app.get('/api/visits/:visitId', requireAdminOrPerawat, async (req, res) => {
+  let conn;
+  try {
+    const { visitId } = req.params;
+    
+    conn = await pool.getConnection();
+    
+    // Get visit info
+    const [visit] = await conn.query(
+      'SELECT * FROM kunjungan WHERE id_kunjungan = ?',
+      [visitId]
+    );
+    
+    if (visit.length === 0) {
+      conn.release();
+      return res.status(404).json({ 
+        success: false,
+        error: 'Visit not found' 
+      });
+    }
+    
+    const visitData = visit[0];
+    
+    // Get patient info
+    const [patient] = await conn.query(
+      'SELECT * FROM pasien WHERE emr_no = ?',
+      [visitData.emr_no]
+    );
+    
+    // Get perawat info
+    const [perawat] = await conn.query(
+      'SELECT nama FROM perawat WHERE emr_perawat = ?',
+      [visitData.emr_perawat]
+    );
+    
+    // Get dokter info
+    const [dokter] = await conn.query(
+      'SELECT nama FROM dokter WHERE emr_dokter = ?',
+      [visitData.emr_dokter]
+    );
+    
+    // Get latest vitals for this visit (same day)
+    const [vitals] = await conn.query(
+      `SELECT * FROM vitals 
+       WHERE emr_no = ? 
+         AND DATE(waktu) = DATE(?)
+       ORDER BY waktu DESC 
+       LIMIT 1`,
+      [visitData.emr_no, visitData.tanggal_kunjungan]
+    );
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      visit: visitData,
+      patient: patient[0] || null,
+      perawat: perawat[0] || null,
+      dokter: dokter[0] || null,
+      vitals: vitals[0] || {}
+    });
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+    if (conn) conn.release();
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
+});
+
+// GET: All measurements for a patient (Rawat Jalan)
+app.get('/api/patients/outpatient/:emrNo/measurements', requireAdminOrPerawat, async (req, res) => {
+  let conn;
+  try {
+    const { emrNo } = req.params;
+    const emrStr = String(emrNo).padStart(11, '0');
+    
+    conn = await pool.getConnection();
+    
+    // Get all measurements for this patient, ordered by time
+    const [measurements] = await conn.query(
+      `SELECT * FROM vitals 
+       WHERE emr_no = ? 
+       ORDER BY waktu DESC 
+       LIMIT 100`,
+      [emrStr]
+    );
+    
+    conn.release();
+    
+    res.json({ 
+      success: true, 
+      measurements: measurements,
+      count: measurements.length
+    });
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+    if (conn) conn.release();
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
+});
+
+// GET: Vitals chart data for outpatient (last 24 hours)
+// GET: Vitals chart data for outpatient (ALL DATA)
+app.get('/api/patients/outpatient/:emrNo/vitals/chart', requireAdminOrPerawat, async (req, res) => {
+  let conn;
+  try {
+    const { emrNo } = req.params;
+    const emrStr = String(emrNo).padStart(11, '0');
+    
+    conn = await pool.getConnection();
+    
+    // ✅ Get ALL vitals for this patient (no time limit)
+    const [vitals] = await conn.query(
+      `SELECT * FROM vitals 
+       WHERE emr_no = ?
+       ORDER BY waktu ASC
+       LIMIT 1000`, // ✅ Optional: limit to prevent too much data
+      [emrStr]
+    );
+    
+    conn.release();
+    
+    res.json({ 
+      success: true, 
+      vitals: vitals,
+      count: vitals.length
+    });
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+    if (conn) conn.release();
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    });
+  }
+});
 /* ============================================================
    SOCKET.IO SETUP
    ============================================================ */
