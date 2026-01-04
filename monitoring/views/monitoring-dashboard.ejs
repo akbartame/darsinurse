@@ -1308,21 +1308,6 @@
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
-/* ✅ Perbaikan: Laptop 1-2 kolom, bukan auto-fit */
-@media (min-width: 1200px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1920px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-    max-width: 1600px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-}
 
 .chart-card {
   background: white;
@@ -1537,12 +1522,6 @@
     padding: 8px 12px;
     font-size: 11px;
   }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-    padding: 15px;
-    border-radius: 0 0 10px 10px;
-  }
 }
 
 /* ============================================================ */
@@ -1612,11 +1591,6 @@
 
   .vital-unit {
     font-size: 11px;
-  }
-
-  /* Charts Small */
-  .charts-grid {
-    gap: 12px;
   }
 
   .chart-card {
@@ -1929,6 +1903,20 @@
     flex: 1;
   }
 }
+@media (min-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+    padding: 15px;
+    border-radius: 0 0 10px 10px;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -3961,7 +3949,7 @@ async function loadVisitsData() {
           <button class="quick-filter-btn active" onclick="setQuickFilter(24)">24 Jam</button>
         </div>
                 
-        <div class="charts-grid" style="margin-top: 20px;">
+        <div class="charts-grid">
           <div class="chart-card">
             <div class="chart-title"><i class="fas fa-heartbeat" style="color: #e74c3c;"></i> Heart Rate (bpm)</div>
             <canvas id="heart-rate-chart"></canvas>
@@ -4379,7 +4367,7 @@ function displayRawatJalanVitals(vitals) {
         <button class="quick-filter-btn" onclick="setJalanQuickFilter(168)">7 Hari</button>
       </div>
             
-      <div class="charts-grid" style="margin-top: 20px;">
+      <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-title"><i class="fas fa-heartbeat" style="color: #e74c3c;"></i> Heart Rate (bpm)</div>
           <canvas id="jalan-hr-chart"></canvas>
