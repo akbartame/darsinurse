@@ -758,7 +758,6 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
     const [result] = await conn.query(
       `INSERT INTO vitals (
         emr_no,
-        id_kunjungan,
         waktu,
         heart_rate,
         respirasi,
@@ -773,7 +772,6 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
       ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         vitalsData.emr_no,
-        vitalsData.id_kunjungan,
         vitalsData.heart_rate,
         vitalsData.respirasi,
         vitalsData.jarak_kasur_cm,
