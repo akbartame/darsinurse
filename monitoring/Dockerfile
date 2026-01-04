@@ -6,8 +6,8 @@ RUN apk add --no-cache tzdata && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
     echo $TZ > /etc/timezone
 
-# Install wget for healthcheck
-RUN apk add --no-cache wget
+# Install wget and curl for healthcheck
+RUN apk add --no-cache wget curl
 
 # Set working directory
 WORKDIR /app
@@ -15,8 +15,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && \
+# ✅ FIX: Install ALL dependencies (not just production)
+# npm ci is more reliable than npm install for Docker
+RUN npm ci && \
     npm cache clean --force
 
 # Copy application files
@@ -32,10 +33,9 @@ USER nodejs
 # Expose port
 EXPOSE 5000
 
-# Health check
+# Health check - use curl instead of wget (more reliable)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
+  CMD curl -f http://localhost:5000/health || exit 1
 
 # Start application
 CMD ["node", "monitoring-server.js"]
-
