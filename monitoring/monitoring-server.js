@@ -843,18 +843,23 @@ app.get('/api/fall-detection/latest', requireAdminOrPerawat, async (req, res) =>
     const [falls] = await conn.query(`
       SELECT 
         v.id, v.emr_no, v.waktu, v.fall_detected,
-        v.heart_rate, v.sistolik, v.diastolik,
+        v.heart_rate, 
+        v.respirasi,
+        v.sistolik, v.diastolik,
         p.nama as nama_pasien, p.poli,
         rd.room_id, rd.device_id,
         k.id_kunjungan,
         k.emr_perawat,
         k.emr_dokter,
-        pr.nama as nama_perawat
+        pr.nama as nama_perawat,
+        dok.nama as nama_dokter
       FROM vitals v
       LEFT JOIN pasien p ON v.emr_no = p.emr_no
       LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
-      LEFT JOIN kunjungan k ON v.id_kunjungan = k.id_kunjungan
+      LEFT JOIN kunjungan k ON v.emr_no = k.emr_no 
+        AND k.status = 'aktif'
       LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
+      LEFT JOIN dokter dok ON k.emr_dokter = dok.emr_dokter
       WHERE v.fall_detected = 1 AND v.waktu >= ?
       ORDER BY v.waktu DESC
       LIMIT 50
@@ -1389,19 +1394,25 @@ async function broadcastVitalUpdates() {
   try {
     conn = await pool.getConnection();
     
-    // ✅ IMPORTANT: Get ONLY new vitals since last check
     const [newVitals] = await conn.query(`
       SELECT 
         v.id, v.emr_no, v.waktu,
-        v.heart_rate, v.respirasi, v.glukosa,
+        v.heart_rate, 
+        v.respirasi,
+        v.glukosa,
         v.sistolik, v.diastolik,
         v.jarak_kasur_cm, v.fall_detected,
         v.berat_badan_kg, v.tinggi_badan_cm, v.bmi,
         p.nama as nama_pasien,
-        rd.room_id
+        rd.room_id,
+        k.emr_perawat,
+        pr.nama as nama_perawat
       FROM vitals v
       LEFT JOIN pasien p ON v.emr_no = p.emr_no
       LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      LEFT JOIN kunjungan k ON v.emr_no = k.emr_no 
+        AND k.status = 'aktif'
+      LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
       WHERE v.waktu > ?
       ORDER BY v.waktu ASC
       LIMIT 50
@@ -1410,22 +1421,19 @@ async function broadcastVitalUpdates() {
     conn.release();
     
     if (newVitals.length === 0) {
-      // ✅ Uncomment this for debugging (will be very verbose)
-      // console.log('📊 [VITAL-POLL] No new data');
       return;
     }
     
-    // ✅ Update last checked timestamp
     lastCheckedVitalTimestamp = new Date(newVitals[newVitals.length - 1].waktu);
     
     console.log(`📊 [VITAL-POLL] Broadcasting ${newVitals.length} new vital(s)`);
     
-    // ✅ Broadcast each vital update
     newVitals.forEach(vital => {
       const vitalData = {
         id: vital.id,
         emr_no: vital.emr_no,
         nama_pasien: vital.nama_pasien,
+        nama_perawat: vital.nama_perawat || 'System',
         room_id: vital.room_id,
         waktu: vital.waktu,
         vitals: {
@@ -1442,23 +1450,22 @@ async function broadcastVitalUpdates() {
         }
       };
       
-      console.log(`📤 [VITAL] EMR ${vital.emr_no}: HR=${vital.heart_rate}, Resp=${vital.respirasi}, Fall=${vital.fall_detected}`);
+      console.log(`📤 [VITAL] EMR ${vital.emr_no}: HR=${vital.heart_rate}, RR=${vital.respirasi}, Perawat=${vital.nama_perawat}`);
       
-      // Broadcast to all clients in monitoring room
       io.to('monitoring-room').emit('vital-update', vitalData);
-      
-      // Also emit to specific patient room if someone is viewing details
       io.to(`patient-${vital.emr_no}`).emit('vital-update-detail', vitalData);
       
-      // ✅ Broadcast fall alert if detected
+      // ✅ Broadcast fall alert DENGAN HR DAN RR TERAKHIR
       if (vital.fall_detected === 1) {
         const fallAlert = {
           id: vital.id,
           emr_no: vital.emr_no,
           nama_pasien: vital.nama_pasien,
+          nama_perawat: vital.nama_perawat || 'System',
           room_id: vital.room_id,
           waktu: vital.waktu.toISOString(),
-          heart_rate: vital.heart_rate,
+          heart_rate: vital.heart_rate,           // ✅ HR TERAKHIR
+          respirasi: vital.respirasi,             // ✅ RR TERAKHIR
           sistolik: vital.sistolik,
           diastolik: vital.diastolik,
           blood_pressure: (vital.sistolik && vital.diastolik) 
@@ -1467,7 +1474,7 @@ async function broadcastVitalUpdates() {
         };
         
         io.to('monitoring-room').emit('fall-alert', fallAlert);
-        console.log(`🚨 [FALL] Alert broadcasted for EMR ${vital.emr_no}`);
+        console.log(`🚨 [FALL] Alert broadcasted for EMR ${vital.emr_no} - HR: ${vital.heart_rate}, RR: ${vital.respirasi} - Perawat: ${vital.nama_perawat}`);
       }
     });
     
@@ -1558,21 +1565,27 @@ async function checkFallDetectionFromDatabase() {
   try {
     const conn = await pool.getConnection();
     
-    // ✅ FIX: Add time window - only check falls from last 30 minutes
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
     
     const [falls] = await conn.query(`
       SELECT 
         v.id, v.emr_no, v.waktu, v.fall_detected,
-        v.heart_rate, v.sistolik, v.diastolik,
+        v.heart_rate,
+        v.respirasi,
+        v.sistolik, v.diastolik,
         p.nama as nama_pasien, p.poli,
-        rd.room_id
+        rd.room_id,
+        k.emr_perawat,
+        pr.nama as nama_perawat
       FROM vitals v
       LEFT JOIN pasien p ON v.emr_no = p.emr_no
       LEFT JOIN room_device rd ON v.emr_no = rd.emr_no
+      LEFT JOIN kunjungan k ON v.emr_no = k.emr_no 
+        AND k.status = 'aktif'
+      LEFT JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
       WHERE v.fall_detected = 1 
         AND v.id > ?
-        AND v.waktu >= ?  -- ✅ NEW: Time filter
+        AND v.waktu >= ?
       ORDER BY v.id ASC
       LIMIT 20
     `, [lastCheckedVitalId, thirtyMinutesAgo]);
@@ -1586,7 +1599,6 @@ async function checkFallDetectionFromDatabase() {
     falls.forEach(fall => {
       lastCheckedVitalId = Math.max(lastCheckedVitalId, fall.id);
       
-      // ✅ FIX: Check both global and age before broadcasting
       const fallAge = Date.now() - new Date(fall.waktu).getTime();
       const fiveMinutes = 5 * 60 * 1000;
       
@@ -1597,13 +1609,12 @@ async function checkFallDetectionFromDatabase() {
       
       if (fallAge > fiveMinutes) {
         console.log(`⏭️ Fall ${fall.id} too old (${Math.round(fallAge/60000)} mins), skipping`);
-        processedFallIds.add(fall.id); // Mark as processed to prevent future checks
+        processedFallIds.add(fall.id);
         return;
       }
       
       processedFallIds.add(fall.id);
       
-      // ✅ Cleanup if too many IDs stored
       if (processedFallIds.size > PROCESSED_IDS_LIMIT) {
         const idsArray = Array.from(processedFallIds);
         const idsToRemove = idsArray.slice(0, 100);
@@ -1615,17 +1626,15 @@ async function checkFallDetectionFromDatabase() {
         id: fall.id,
         emr_no: fall.emr_no,
         nama_pasien: fall.nama_pasien,
+        nama_perawat: fall.nama_perawat || 'System',
         room_id: fall.room_id || `Room-${fall.emr_no}`,
         poli: fall.poli,
         waktu: fall.waktu.toISOString(),
-        heart_rate: fall.heart_rate,
-        sistolik: fall.sistolik,
-        diastolik: fall.diastolik,
-        blood_pressure: fall.sistolik && fall.diastolik 
-          ? `${fall.sistolik}/${fall.diastolik}` : 'N/A'
+        heart_rate: fall.heart_rate,               // ✅ HR TERAKHIR
+        respirasi: fall.respirasi,                 // ✅ RR TERAKHIR
       };
       
-      console.log(`📤 Broadcasting fall ${fall.id}: ${fall.nama_pasien}`);
+      console.log(`📤 Broadcasting fall ${fall.id}: ${fall.nama_pasien} - HR: ${fall.heart_rate}, RR: ${fall.respirasi} - Perawat: ${fall.nama_perawat}`);
       io.to('monitoring-room').emit('fall-alert', alertData);
     });
     
