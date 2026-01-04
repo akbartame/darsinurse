@@ -136,10 +136,10 @@ mqttClient.on('message', (topic, message) => {
       timestamp: payload.timestamp
     });
     
-    // ✅ Broadcast ke semua Socket.IO clients (monitoring dashboard)
+    // ✅ FIXED: Broadcast dengan room_id yang jelas
     io.emit('mqtt-vital-update', {
       device_id: payload.device_id,
-      room_id: payload.room_id,
+      room_id: payload.room_id, // ✅ PENTING: Ini digunakan untuk filtering
       vitals: {
         heart_rate: payload.avg_heart_rate,
         respirasi: payload.avg_breath_rate,
@@ -1830,24 +1830,19 @@ async function broadcastVitalUpdates() {
       
       // ✅ Broadcast fall alert DENGAN HR DAN RR TERAKHIR
       if (vital.fall_detected === 1) {
-        const fallAlert = {
-          id: vital.id,
-          emr_no: vital.emr_no,
-          nama_pasien: vital.nama_pasien,
-          nama_perawat: vital.nama_perawat || 'System',
-          room_id: vital.room_id,
-          waktu: vital.waktu.toISOString(),
-          heart_rate: vital.heart_rate,           // ✅ HR TERAKHIR
-          respirasi: vital.respirasi,             // ✅ RR TERAKHIR
-          sistolik: vital.sistolik,
-          diastolik: vital.diastolik,
-          blood_pressure: (vital.sistolik && vital.diastolik) 
-            ? `${vital.sistolik}/${vital.diastolik}` 
-            : 'N/A'
-        };
-        
-        io.to('monitoring-room').emit('fall-alert', fallAlert);
-        console.log(`🚨 [FALL] Alert broadcasted for EMR ${vital.emr_no} - HR: ${vital.heart_rate}, RR: ${vital.respirasi} - Perawat: ${vital.nama_perawat}`);
+      const fallAlert = {
+        id: vital.id,                          // ✅ FIXED: pakai vital.id
+        emr_no: vital.emr_no,                  // ✅ FIXED
+        nama_pasien: vital.nama_pasien,        // ✅ FIXED
+        nama_perawat: vital.nama_perawat || 'System',
+        room_id: vital.room_id,
+        waktu: vital.waktu.toISOString(),
+        heart_rate: vital.heart_rate,          // ✅ KEEP
+        respirasi: vital.respirasi             // ✅ KEEP
+      };
+
+      io.to('monitoring-room').emit('fall-alert', fallAlert);
+      console.log(`🚨 [FALL] Alert broadcasted for EMR ${vital.emr_no} - HR: ${vital.heart_rate}, RR: ${vital.respirasi} - Perawat: ${vital.nama_perawat}`);
       }
     });
     
@@ -1946,7 +1941,8 @@ async function checkFallDetectionFromDatabase() {
         v.respirasi,
         v.sistolik, v.diastolik,
         p.nama as nama_pasien, p.poli,
-        rd.room_id,
+        rd.room_id, 
+        rd.device_id,  // ✅ TAMBAHKAN INI
         latest_k.emr_perawat,
         pr.nama as nama_perawat
       FROM vitals v
@@ -2002,19 +1998,21 @@ async function checkFallDetectionFromDatabase() {
         idsToRemove.forEach(id => processedFallIds.delete(id));
         console.log(`🧹 Cleaned ${idsToRemove.length} old processed IDs`);
       }
-      
+
       const alertData = {
         id: fall.id,
         emr_no: fall.emr_no,
         nama_pasien: fall.nama_pasien,
         nama_perawat: fall.nama_perawat || 'System',
-        room_id: fall.room_id || `Room-${fall.emr_no}`,
+        room_id: fall.room_id,
+        device_id: fall.device_id,
         poli: fall.poli,
         waktu: fall.waktu.toISOString(),
-        heart_rate: fall.heart_rate,               // ✅ HR TERAKHIR
-        respirasi: fall.respirasi,                 // ✅ RR TERAKHIR
+        heart_rate: fall.heart_rate,
+        respirasi: fall.respirasi,           // ✅ KEEP
+        jarak_kasur_cm: fall.jarak_kasur_cm
       };
-      
+
       console.log(`📤 Broadcasting fall ${fall.id}: ${fall.nama_pasien} - HR: ${fall.heart_rate}, RR: ${fall.respirasi} - Perawat: ${fall.nama_perawat}`);
       io.to('monitoring-room').emit('fall-alert', alertData);
     });

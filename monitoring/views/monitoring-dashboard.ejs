@@ -2098,67 +2098,72 @@ function updateRoomVitalsInTable(room_id, vitals) {
   console.log(`🔄 Updating table for room: ${room_id}`);
   
   const rows = document.querySelectorAll('.patients-table tbody tr');
+  let foundMatch = false;
   
   rows.forEach(row => {
-    const roomCell = row.querySelectorAll('td')[5]; // Column Ruangan
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 11) return; // Skip invalid rows
+    
+    // ✅ FIX: Ambil room_id dari column index 5 (Ruangan)
+    const roomCell = cells[5];
     if (!roomCell) return;
     
-    const roomText = roomCell.textContent.trim();
+    // ✅ Extract text dari badge
+    const roomBadge = roomCell.querySelector('.badge');
+    if (!roomBadge) return;
     
-    if (roomText === room_id) {
-      console.log(`✓ Found row for room ${room_id}`);
-      const cells = row.querySelectorAll('td');
+    const rowRoomId = roomBadge.textContent.trim();
+    
+    // ✅ STRICT MATCH: Hanya update jika room_id PERSIS SAMA
+    if (rowRoomId !== room_id) {
+      return; // Skip row ini
+    }
+    
+    foundMatch = true;
+    console.log(`✅ Match found for room ${room_id} in row`);
+    
+    // ✅ Update HR (column 7, index 7)
+    if (cells[7] && vitals.heart_rate !== undefined) {
+      cells[7].innerHTML = `<span class="vital-value ${getHeartRateClass(vitals.heart_rate)}">${vitals.heart_rate}</span>`;
+      cells[7].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+      setTimeout(() => cells[7].style.backgroundColor = '', 800);
+    }
+    
+    // ✅ Update Respirasi (column 8, index 8)
+    if (cells[8] && vitals.respirasi !== undefined) {
+      cells[8].innerHTML = `<span class="vital-value ${getRespirasiClass(vitals.respirasi)}">${vitals.respirasi}</span>`;
+      cells[8].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+      setTimeout(() => cells[8].style.backgroundColor = '', 800);
+    }
+    
+    // ✅ Update Jarak Kasur (column 9, index 9)
+    if (cells[9] && vitals.jarak_kasur_cm !== undefined) {
+      cells[9].textContent = vitals.jarak_kasur_cm;
+      cells[9].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
+      setTimeout(() => cells[9].style.backgroundColor = '', 800);
+    }
+    
+    // ✅ Update Fall Status (column 10, index 10)
+    if (cells[10] && vitals.fall_detected !== undefined) {
+      const isFall = vitals.fall_detected === 1;
+      cells[10].innerHTML = `<span class="status-badge ${isFall ? 'status-detected' : 'status-normal'}">${isFall ? '🚨 TERDETEKSI' : '✓ NORMAL'}</span>`;
       
-      // Update HR (column 7, index 7)
-      if (cells[7] && vitals.heart_rate) {
-        cells[7].innerHTML = `<span class="vital-value ${getHeartRateClass(vitals.heart_rate)}">${vitals.heart_rate}</span>`;
-        cells[7].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
-        setTimeout(() => cells[7].style.backgroundColor = '', 800);
-      }
-      
-      // Update Respirasi (column 8, index 8)
-      if (cells[8] && vitals.respirasi) {
-        cells[8].innerHTML = `<span class="vital-value ${getRespirasiClass(vitals.respirasi)}">${vitals.respirasi}</span>`;
-        cells[8].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
-        setTimeout(() => cells[8].style.backgroundColor = '', 800);
-      }
-      
-      // Update Jarak Kasur (column 9, index 9)
-      if (cells[9] && vitals.jarak_kasur_cm !== undefined) {
-        cells[9].textContent = vitals.jarak_kasur_cm;
-        cells[9].style.backgroundColor = 'rgba(0, 255, 0, 0.15)';
-        setTimeout(() => cells[9].style.backgroundColor = '', 800);
-      }
-      
-      // Update Fall Status (column 10, index 10)
-      if (cells[10] && vitals.fall_detected !== undefined) {
-        const isFall = vitals.fall_detected === 1;
-        cells[10].innerHTML = `<span class="status-badge ${isFall ? 'status-detected' : 'status-normal'}">${isFall ? '🚨 TERDETEKSI' : '✓ NORMAL'}</span>`;
-        
-        if (isFall) {
-          cells[10].style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
-          setTimeout(() => cells[10].style.backgroundColor = '', 1000);
-          
-          // Trigger fall alert jika distance === 0
-          handleFallAlert({
-            id: Math.random(),
-            room_id: room_id,
-            emr_no: row.querySelectorAll('td')[0].textContent,
-            nama_pasien: row.querySelectorAll('td')[1].textContent,
-            heart_rate: vitals.heart_rate,
-            blood_pressure: 'N/A',
-            waktu: new Date().toISOString()
-          });
-        }
-      }
-      
-      // Update timestamp (last column)
-      const lastCell = cells[cells.length - 1];
-      if (lastCell) {
-        lastCell.innerHTML = `<small style="font-size: 11px;">${formatTime(new Date())}</small>`;
+      if (isFall) {
+        cells[10].style.backgroundColor = 'rgba(255, 0, 0, 0.2)';
+        setTimeout(() => cells[10].style.backgroundColor = '', 1000);
       }
     }
+    
+    // ✅ Update timestamp (last column)
+    const lastCell = cells[cells.length - 1];
+    if (lastCell) {
+      lastCell.innerHTML = `<small style="font-size: 11px;">${formatTime(new Date())}</small>`;
+    }
   });
+  
+  if (!foundMatch) {
+    console.warn(`⚠️ No row found for room_id: ${room_id}`);
+  }
 }
 /* ============================================================
    NEW FUNCTION: Update vitals display with animation
@@ -2497,7 +2502,7 @@ function updateChartsRealtime(vitals, timestamp) {
       if (Notification.permission === 'granted') {
         try {
           const notification = new Notification('🚨 FALL ALERT!', {
-            body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}`,
+            body: `${alert.nama_pasien} - Room ${alert.room_id}\nEMR: ${alert.emr_no}\nHR: ${alert.heart_rate || 'N/A'} | RR: ${alert.respirasi || 'N/A'}`,
             tag: alertKey,
             requireInteraction: true,
             vibrate: [200, 100, 200],
@@ -2690,10 +2695,10 @@ function updateChartsRealtime(vitals, timestamp) {
             <span class="fall-alert-label">💓 Heart Rate:</span>
             <span class="fall-alert-value">${alert.heart_rate || 'N/A'} bpm</span>
           </div>
-          
+
           <div class="fall-alert-info">
-            <span class="fall-alert-label">🩺 Blood Pressure:</span>
-            <span class="fall-alert-value">${alert.blood_pressure || 'N/A'} mmHg</span>
+            <span class="fall-alert-label">🫁 Respirasi:</span>
+            <span class="fall-alert-value">${alert.respirasi || 'N/A'} /min</span>
           </div>
           
           <div class="fall-alert-info">
