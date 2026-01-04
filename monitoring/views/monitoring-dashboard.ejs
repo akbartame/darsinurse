@@ -3767,17 +3767,38 @@ async function loadVisitsData() {
     function displayCharts(vitals) {
       const container = document.getElementById('charts-container');
       
-      // ✅ NEW: Tambahkan filter controls
-      container.innerHTML = `
+      if (!container) {
+        console.error('❌ Charts container not found');
+        return;
+      }
+      
+      // ✅ Destroy existing charts FIRST
+      Object.values(charts).forEach(chart => {
+        if (chart && typeof chart.destroy === 'function') {
+          try {
+            chart.destroy();
+          } catch (err) {
+            console.warn('⚠️ Error destroying chart:', err);
+          }
+        }
+      });
+      charts = {};
+
+      // ✅ Set default date range (last 24 hours)
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      // ✅ Build HTML dengan ID yang UNIK dan VALID
+      const filterHTML = `
         <div class="chart-filter-controls">
           <div class="filter-group">
             <label class="filter-label">📅 Dari</label>
-            <input type="datetime-local" id="chart-start-date" class="filter-input" />
+            <input type="datetime-local" id="chart-start-date" class="filter-input" value="${formatDateTimeLocal(yesterday)}" />
           </div>
           
           <div class="filter-group">
             <label class="filter-label">📅 Sampai</label>
-            <input type="datetime-local" id="chart-end-date" class="filter-input" />
+            <input type="datetime-local" id="chart-end-date" class="filter-input" value="${formatDateTimeLocal(now)}" />
           </div>
           
           <button class="filter-btn" onclick="applyChartFilter()">
@@ -3792,7 +3813,7 @@ async function loadVisitsData() {
             <i class="fas fa-sync-alt"></i> Refresh
           </button>
         </div>
-
+        
         <div class="quick-filters">
           <button class="quick-filter-btn" onclick="setQuickFilter(1)">1 Jam</button>
           <button class="quick-filter-btn" onclick="setQuickFilter(3)">3 Jam</button>
@@ -3800,21 +3821,47 @@ async function loadVisitsData() {
           <button class="quick-filter-btn" onclick="setQuickFilter(12)">12 Jam</button>
           <button class="quick-filter-btn active" onclick="setQuickFilter(24)">24 Jam</button>
         </div>
+        
+        <div class="charts-grid" style="margin-top: 20px;">
+          <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-heartbeat" style="color: #e74c3c;"></i> Heart Rate (bpm)</div>
+            <canvas id="heart-rate-chart"></canvas>
+          </div>
+          
+          <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-lungs" style="color: #3498db;"></i> Respiratory Rate (/min)</div>
+            <canvas id="respiratory-chart"></canvas>
+          </div>
+          
+          <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-tint" style="color: #f39c12;"></i> Blood Pressure (mmHg)</div>
+            <canvas id="bp-chart"></canvas>
+          </div>
+          
+          <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-weight" style="color: #9b59b6;"></i> Glucose (mg/dL)</div>
+            <canvas id="glucose-chart"></canvas>
+          </div>
+          
+          <div class="chart-card">
+            <div class="chart-title"><i class="fas fa-user-injured" style="color: #e74c3c;"></i> Fall Detection</div>
+            <canvas id="fall-chart"></canvas>
+          </div>
+        </div>
       `;
       
-      // ✅ Set default date range (last 24 hours)
-      const now = new Date();
-      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      // ✅ Set innerHTML
+      container.innerHTML = filterHTML;
       
-      document.getElementById('chart-end-date').value = formatDateTimeLocal(now);
-      document.getElementById('chart-start-date').value = formatDateTimeLocal(yesterday);
-      
-      // Store original vitals data
+      // ✅ Store original data
       window.originalVitalsData = vitals;
       
-      // Render charts with current data
-      renderCharts(vitals);
+      // ✅ Wait for DOM to render THEN create charts
+      setTimeout(() => {
+        renderCharts(vitals);
+      }, 100);
     }
+
     // ============================================================
     // HELPER FUNCTIONS
     // ============================================================
@@ -4062,145 +4109,192 @@ function displayRawatJalanVitals(vitals) {
   `;
 }
 
-async function loadRawatJalanMeasurements(emrNo) {
-  try {
-    const response = await fetch(`/api/patients/outpatient/${emrNo}/measurements`);
-    const data = await response.json();
-    
-    if (data.success && data.measurements.length > 0) {
-      const container = document.getElementById('jalan-measurements-container');
+  async function loadRawatJalanMeasurements(emrNo) {
+    try {
+      const response = await fetch(`/api/patients/outpatient/${emrNo}/measurements`);
+      const data = await response.json();
       
-      container.innerHTML = `
-        <table class="examination-table">
-          <thead>
-            <tr>
-              <th>Waktu</th>
-              <th>HR (bpm)</th>
-              <th>Resp (/min)</th>
-              <th>Glukosa (mg/dL)</th>
-              <th>Sistolik</th>
-              <th>Diastolik</th>
-              <th>Berat (kg)</th>
-              <th>BMI</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.measurements.map(m => `
+      if (data.success && data.measurements.length > 0) {
+        const container = document.getElementById('jalan-measurements-container');
+        
+        container.innerHTML = `
+          <table class="examination-table">
+            <thead>
               <tr>
-                <td>${formatDateTime(m.waktu)}</td>
-                <td><span class="vital-value ${getHeartRateClass(m.heart_rate)}">${m.heart_rate || '-'}</span></td>
-                <td><span class="vital-value ${getRespirasiClass(m.respirasi)}">${m.respirasi || '-'}</span></td>
-                <td>${m.glukosa || '-'}</td>
-                <td>${m.sistolik || '-'}</td>
-                <td>${m.diastolik || '-'}</td>
-                <td>${m.berat_badan_kg || '-'}</td>
-                <td>${m.bmi || '-'}</td>
+                <th>Waktu</th>
+                <th>HR (bpm)</th>
+                <th>Resp (/min)</th>
+                <th>Glukosa (mg/dL)</th>
+                <th>Sistolik</th>
+                <th>Diastolik</th>
+                <th>Berat (kg)</th>
+                <th>BMI</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
-    } else {
-      document.getElementById('jalan-measurements-container').innerHTML = `
-        <div class="empty-state">
-          <i class="fas fa-info-circle"></i>
-          <p>Belum ada riwayat pengukuran</p>
-        </div>
-      `;
+            </thead>
+            <tbody>
+              ${data.measurements.map(m => `
+                <tr>
+                  <td>${formatDateTime(m.waktu)}</td>
+                  <td><span class="vital-value ${getHeartRateClass(m.heart_rate)}">${m.heart_rate || '-'}</span></td>
+                  <td><span class="vital-value ${getRespirasiClass(m.respirasi)}">${m.respirasi || '-'}</span></td>
+                  <td>${m.glukosa || '-'}</td>
+                  <td>${m.sistolik || '-'}</td>
+                  <td>${m.diastolik || '-'}</td>
+                  <td>${m.berat_badan_kg || '-'}</td>
+                  <td>${m.bmi || '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      } else {
+        document.getElementById('jalan-measurements-container').innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-info-circle"></i>
+            <p>Belum ada riwayat pengukuran</p>
+          </div>
+        `;
+      }
+    } catch (err) {
+      console.error('❌ Error loading measurements:', err);
     }
-  } catch (err) {
-    console.error('❌ Error loading measurements:', err);
   }
-}
 
-async function loadRawatJalanChart(emrNo) {
-  try {
-    const response = await fetch(`/api/patients/outpatient/${emrNo}/vitals/chart`);
-    const data = await response.json();
+  async function loadRawatJalanChart(emrNo) {
+    try {
+      const response = await fetch(`/api/patients/outpatient/${emrNo}/vitals/chart`);
+      const data = await response.json();
+      
+      if (data.success && data.vitals.length > 0) {
+        displayRawatJalanCharts(data.vitals);
+      } else {
+        document.getElementById('jalan-charts-container').innerHTML = `
+          <div class="empty-state">
+            <i class="fas fa-chart-line"></i>
+            <p>Tidak ada data untuk ditampilkan</p>
+          </div>
+        `;
+      }
+    } catch (err) {
+      console.error('❌ Chart error:', err);
+    }
+  }
+
+  function displayRawatJalanCharts(vitals) {
+    const container = document.getElementById('jalan-charts-container');
     
-    if (data.success && data.vitals.length > 0) {
-      displayRawatJalanCharts(data.vitals);
-    } else {
-      document.getElementById('jalan-charts-container').innerHTML = `
-        <div class="empty-state">
-          <i class="fas fa-chart-line"></i>
-          <p>Tidak ada data untuk ditampilkan</p>
-        </div>
-      `;
+    if (!container) {
+      console.error('❌ Jalan charts container not found');
+      return;
     }
-  } catch (err) {
-    console.error('❌ Chart error:', err);
-  }
-}
+    
+    // ✅ Destroy existing charts FIRST
+    Object.values(chartsJalan).forEach(chart => {
+      if (chart && typeof chart.destroy === 'function') {
+        try {
+          chart.destroy();
+        } catch (err) {
+          console.warn('⚠️ Error destroying chart:', err);
+        }
+      }
+    });
+    chartsJalan = {};
 
-function displayRawatJalanCharts(vitals) {
-  const container = document.getElementById('jalan-charts-container');
-  
-  // ✅ NEW: Tambahkan filter controls
-  container.innerHTML = `
-    <div class="chart-filter-controls">
-      <div class="filter-group">
-        <span class="filter-label">📅 Dari:</span>
-        <input type="datetime-local" id="jalan-chart-start-date" class="filter-input" />
+    // ✅ Set default date range
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    // ✅ Build HTML dengan ID yang UNIK
+    const filterHTML = `
+      <div class="chart-filter-controls">
+        <div class="filter-group">
+          <label class="filter-label">📅 Dari</label>
+          <input type="datetime-local" id="jalan-chart-start-date" class="filter-input" value="${formatDateTimeLocal(yesterday)}" />
+        </div>
+        
+        <div class="filter-group">
+          <label class="filter-label">📅 Sampai</label>
+          <input type="datetime-local" id="jalan-chart-end-date" class="filter-input" value="${formatDateTimeLocal(now)}" />
+        </div>
+        
+        <button class="filter-btn" onclick="applyJalanChartFilter()">
+          <i class="fas fa-filter"></i> Terapkan
+        </button>
+        
+        <button class="filter-btn secondary" onclick="resetJalanChartFilter()">
+          <i class="fas fa-undo"></i> Reset
+        </button>
+        
+        <button class="filter-btn" onclick="refreshJalanCharts()">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
       </div>
       
-      <div class="filter-group">
-        <span class="filter-label">📅 Sampai:</span>
-        <input type="datetime-local" id="jalan-chart-end-date" class="filter-input" />
+      <div class="quick-filters">
+        <button class="quick-filter-btn" onclick="setJalanQuickFilter(1)">1 Jam</button>
+        <button class="quick-filter-btn" onclick="setJalanQuickFilter(3)">3 Jam</button>
+        <button class="quick-filter-btn" onclick="setJalanQuickFilter(6)">6 Jam</button>
+        <button class="quick-filter-btn active" onclick="setJalanQuickFilter(24)">24 Jam</button>
+        <button class="quick-filter-btn" onclick="setJalanQuickFilter(168)">7 Hari</button>
       </div>
       
-      <button class="filter-btn" onclick="applyJalanChartFilter()">
-        <i class="fas fa-filter"></i> Terapkan Filter
-      </button>
-      
-      <button class="filter-btn secondary" onclick="resetJalanChartFilter()">
-        <i class="fas fa-undo"></i> Reset
-      </button>
-      
-      <button class="filter-btn" onclick="refreshJalanCharts()">
-        <i class="fas fa-sync-alt"></i> Refresh
-      </button>
-    </div>
+      <div class="charts-grid" style="margin-top: 20px;">
+        <div class="chart-card">
+          <div class="chart-title"><i class="fas fa-heartbeat" style="color: #e74c3c;"></i> Heart Rate (bpm)</div>
+          <canvas id="jalan-hr-chart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+          <div class="chart-title"><i class="fas fa-lungs" style="color: #3498db;"></i> Respiratory Rate (/min)</div>
+          <canvas id="jalan-resp-chart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+          <div class="chart-title"><i class="fas fa-tint" style="color: #f39c12;"></i> Blood Pressure (mmHg)</div>
+          <canvas id="jalan-bp-chart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+          <div class="chart-title"><i class="fas fa-weight" style="color: #9b59b6;"></i> Glucose (mg/dL)</div>
+          <canvas id="jalan-glucose-chart"></canvas>
+        </div>
+      </div>
+    `;
     
-    <div class="quick-filters">
-      <button class="quick-filter-btn" onclick="setJalanQuickFilter(1)">1 Jam</button>
-      <button class="quick-filter-btn" onclick="setJalanQuickFilter(3)">3 Jam</button>
-      <button class="quick-filter-btn" onclick="setJalanQuickFilter(6)">6 Jam</button>
-      <button class="quick-filter-btn active" onclick="setJalanQuickFilter(24)">24 Jam</button>
-      <button class="quick-filter-btn" onclick="setJalanQuickFilter(168)">7 Hari</button>
-    </div>
+    // ✅ Set innerHTML
+    container.innerHTML = filterHTML;
     
-    <div class="charts-grid" style="margin-top: 20px;">
-      <div class="chart-card"><div class="chart-title">Heart Rate (bpm)</div><canvas id="jalan-hr-chart"></canvas></div>
-      <div class="chart-card"><div class="chart-title">Respiratory Rate (/min)</div><canvas id="jalan-resp-chart"></canvas></div>
-      <div class="chart-card"><div class="chart-title">Blood Pressure (mmHg)</div><canvas id="jalan-bp-chart"></canvas></div>
-      <div class="chart-card"><div class="chart-title">Glucose (mg/dL)</div><canvas id="jalan-glucose-chart"></canvas></div>
-    </div>
-  `;
-  
-  // Set default date range
-  const now = new Date();
-  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  
-  document.getElementById('jalan-chart-end-date').value = formatDateTimeLocal(now);
-  document.getElementById('jalan-chart-start-date').value = formatDateTimeLocal(yesterday);
-  
-  window.originalJalanVitalsData = vitals;
-  
-  renderJalanCharts(vitals);
-}
-
+    // ✅ Store original data
+    window.originalJalanVitalsData = vitals;
+    
+    // ✅ Wait for DOM to render THEN create charts
+    setTimeout(() => {
+      renderJalanCharts(vitals);
+    }, 100);
+  }
 // Helper functions untuk Rawat Jalan
 function setJalanQuickFilter(hours) {
   const now = new Date();
   const startDate = new Date(now.getTime() - hours * 60 * 60 * 1000);
   
-  document.getElementById('jalan-chart-end-date').value = formatDateTimeLocal(now);
-  document.getElementById('jalan-chart-start-date').value = formatDateTimeLocal(startDate);
+  const startInput = document.getElementById('jalan-chart-start-date');
+  const endInput = document.getElementById('jalan-chart-end-date');
   
-  document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
+  if (!startInput || !endInput) {
+    console.error('❌ Jalan filter inputs not found');
+    return;
+  }
+  
+  startInput.value = formatDateTimeLocal(startDate);
+  endInput.value = formatDateTimeLocal(now);
+  
+  // Update active button
+  document.querySelectorAll('.quick-filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
   event.target.classList.add('active');
   
+  // Apply filter
   applyJalanChartFilter();
 }
 
@@ -4245,91 +4339,218 @@ function resetJalanChartFilter() {
 }
 
 function refreshJalanCharts() {
-  if (!currentPatientEMRJalan) return;
-  console.log('🔄 Refreshing Rawat Jalan charts');
+  if (!currentPatientEMRJalan) {
+    console.warn('⚠️ No patient selected');
+    return;
+  }
+  
+  console.log('🔄 Refreshing Jalan charts for EMR:', currentPatientEMRJalan);
+  
+  // Show loading
+  const container = document.getElementById('jalan-charts-container');
+  if (container) {
+    container.innerHTML = `
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Memuat data terbaru...</p>
+      </div>
+    `;
+  }
+  
+  // Reload
   loadRawatJalanChart(currentPatientEMRJalan);
 }
 
 function renderJalanCharts(vitals) {
-  // Destroy existing
+  console.log('🎨 Starting renderJalanCharts with', vitals.length, 'data points');
+  
+  // ✅ Destroy existing charts
   Object.values(chartsJalan).forEach(chart => {
-    if (chart) chart.destroy();
+    if (chart && typeof chart.destroy === 'function') {
+      try {
+        chart.destroy();
+      } catch (err) {
+        console.warn('⚠️ Destroy error:', err);
+      }
+    }
   });
   chartsJalan = {};
   
+  // ✅ Validate data
+  if (!vitals || vitals.length === 0) {
+    console.warn('⚠️ No vitals data to render');
+    return;
+  }
+  
   const labels = vitals.map(v => formatChartTime(v.waktu));
+  
+  // ✅ Chart options
   const opts = {
     responsive: true,
-    maintainAspectRatio: false,
+    maintainAspectRatio: true,
     plugins: {
-      legend: { display: true, position: 'top', labels: { boxWidth: 12, padding: 10, font: { size: 11 } } },
-      tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.8)', padding: 12, titleFont: { size: 13 }, bodyFont: { size: 12 } }
+      legend: { 
+        display: true, 
+        position: 'top',
+        labels: { 
+          boxWidth: 12, 
+          padding: 10, 
+          font: { size: 11 } 
+        } 
+      },
+      tooltip: { 
+        backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+        padding: 12,
+        titleFont: { size: 13 },
+        bodyFont: { size: 12 }
+      }
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.05)' }, ticks: { font: { size: 11 } } },
-      x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0 } }
+      y: { 
+        beginAtZero: true, 
+        grid: { color: 'rgba(0, 0, 0, 0.05)' },
+        ticks: { font: { size: 11 } }
+      },
+      x: { 
+        grid: { display: false },
+        ticks: { 
+          font: { size: 10 },
+          maxRotation: 45,
+          minRotation: 0
+        }
+      }
     }
   };
-
-  chartsJalan.hr = new Chart(document.getElementById('jalan-hr-chart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Heart Rate',
-        data: vitals.map(v => v.heart_rate),
-        borderColor: '#e74c3c',
-        backgroundColor: 'rgba(231, 76, 60, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: opts
-  });
-
-  chartsJalan.resp = new Chart(document.getElementById('jalan-resp-chart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Respirasi',
-        data: vitals.map(v => v.respirasi),
-        borderColor: '#3498db',
-        backgroundColor: 'rgba(52, 152, 219, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: opts
-  });
-
-  chartsJalan.bp = new Chart(document.getElementById('jalan-bp-chart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Sistolik', data: vitals.map(v => v.sistolik), borderColor: '#e74c3c', tension: 0.4 },
-        { label: 'Diastolik', data: vitals.map(v => v.diastolik), borderColor: '#3498db', tension: 0.4 }
-      ]
-    },
-    options: opts
-  });
-
-  chartsJalan.glucose = new Chart(document.getElementById('jalan-glucose-chart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Glukosa',
-        data: vitals.map(v => v.glukosa),
-        borderColor: '#f39c12',
-        backgroundColor: 'rgba(243, 156, 18, 0.1)',
-        tension: 0.4,
-        fill: true
-      }]
-    },
-    options: opts
-  });
+  
+  // ✅ HEART RATE
+  try {
+    const hrCanvas = document.getElementById('jalan-hr-chart');
+    if (!hrCanvas) throw new Error('Canvas jalan-hr-chart not found');
+    
+    const hrCtx = hrCanvas.getContext('2d');
+    if (!hrCtx) throw new Error('Cannot get 2D context for jalan-hr-chart');
+    
+    chartsJalan.hr = new Chart(hrCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Heart Rate',
+          data: vitals.map(v => v.heart_rate || 0),
+          borderColor: '#e74c3c',
+          backgroundColor: 'rgba(231, 76, 60, 0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: opts
+    });
+    console.log('✅ Jalan HR chart created');
+  } catch (err) {
+    console.error('❌ Jalan HR chart error:', err);
+  }
+  
+  // ✅ RESPIRATORY
+  try {
+    const respCanvas = document.getElementById('jalan-resp-chart');
+    if (!respCanvas) throw new Error('Canvas jalan-resp-chart not found');
+    
+    const respCtx = respCanvas.getContext('2d');
+    if (!respCtx) throw new Error('Cannot get 2D context for jalan-resp-chart');
+    
+    chartsJalan.resp = new Chart(respCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Respirasi',
+          data: vitals.map(v => v.respirasi || 0),
+          borderColor: '#3498db',
+          backgroundColor: 'rgba(52, 152, 219, 0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: opts
+    });
+    console.log('✅ Jalan Resp chart created');
+  } catch (err) {
+    console.error('❌ Jalan Resp chart error:', err);
+  }
+  
+  // ✅ BLOOD PRESSURE
+  try {
+    const bpCanvas = document.getElementById('jalan-bp-chart');
+    if (!bpCanvas) throw new Error('Canvas jalan-bp-chart not found');
+    
+    const bpCtx = bpCanvas.getContext('2d');
+    if (!bpCtx) throw new Error('Cannot get 2D context for jalan-bp-chart');
+    
+    chartsJalan.bp = new Chart(bpCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Sistolik',
+            data: vitals.map(v => v.sistolik || 0),
+            borderColor: '#e74c3c',
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          },
+          {
+            label: 'Diastolik',
+            data: vitals.map(v => v.diastolik || 0),
+            borderColor: '#3498db',
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }
+        ]
+      },
+      options: opts
+    });
+    console.log('✅ Jalan BP chart created');
+  } catch (err) {
+    console.error('❌ Jalan BP chart error:', err);
+  }
+  
+  // ✅ GLUCOSE
+  try {
+    const glucoseCanvas = document.getElementById('jalan-glucose-chart');
+    if (!glucoseCanvas) throw new Error('Canvas jalan-glucose-chart not found');
+    
+    const glucoseCtx = glucoseCanvas.getContext('2d');
+    if (!glucoseCtx) throw new Error('Cannot get 2D context for jalan-glucose-chart');
+    
+    chartsJalan.glucose = new Chart(glucoseCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Glukosa',
+          data: vitals.map(v => v.glukosa || 0),
+          borderColor: '#f39c12',
+          backgroundColor: 'rgba(243, 156, 18, 0.1)',
+          tension: 0.4,
+          fill: true,
+          pointRadius: 4,
+          pointHoverRadius: 6
+        }]
+      },
+      options: opts
+    });
+    console.log('✅ Jalan Glucose chart created');
+  } catch (err) {
+    console.error('❌ Jalan Glucose chart error:', err);
+  }
+  
+  console.log('✅ All Jalan charts rendered successfully');
 }
 
 /* ============================================================
@@ -4351,8 +4572,16 @@ function setQuickFilter(hours) {
   const now = new Date();
   const startDate = new Date(now.getTime() - hours * 60 * 60 * 1000);
   
-  document.getElementById('chart-end-date').value = formatDateTimeLocal(now);
-  document.getElementById('chart-start-date').value = formatDateTimeLocal(startDate);
+  const startInput = document.getElementById('chart-start-date');
+  const endInput = document.getElementById('chart-end-date');
+  
+  if (!startInput || !endInput) {
+    console.error('❌ Filter inputs not found');
+    return;
+  }
+  
+  startInput.value = formatDateTimeLocal(startDate);
+  endInput.value = formatDateTimeLocal(now);
   
   // Update active button
   document.querySelectorAll('.quick-filter-btn').forEach(btn => {
@@ -4360,7 +4589,7 @@ function setQuickFilter(hours) {
   });
   event.target.classList.add('active');
   
-  // Apply filter automatically
+  // Apply filter
   applyChartFilter();
 }
 
@@ -4430,40 +4659,59 @@ function refreshCharts() {
   
   console.log('🔄 Refreshing charts for EMR:', currentPatientEMR);
   
-  // Show loading indicator
+  // Show loading
   const container = document.getElementById('charts-container');
-  const controls = container.querySelector('.chart-filter-controls');
-  const quickFilters = container.querySelector('.quick-filters');
+  if (container) {
+    const originalContent = container.innerHTML;
+    container.innerHTML = `
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Memuat data terbaru...</p>
+      </div>
+    `;
+  }
   
-  container.innerHTML = `
-    <div class="loading-spinner">
-      <div class="spinner"></div>
-      <p>Memuat data terbaru...</p>
-    </div>
-  `;
-  
-  // Reload data from API
+  // Reload data
   loadVitalsChart(currentPatientEMR);
 }
 
-// Render charts with given data
+    // Render charts with given data
     function renderCharts(vitals) {
-      // Destroy existing charts
+      console.log('🎨 Starting renderCharts with', vitals.length, 'data points');
+      
+      // ✅ Destroy existing charts
       Object.values(charts).forEach(chart => {
-        if (chart) chart.destroy();
+        if (chart && typeof chart.destroy === 'function') {
+          try {
+            chart.destroy();
+          } catch (err) {
+            console.warn('⚠️ Destroy error:', err);
+          }
+        }
       });
       charts = {};
       
+      // ✅ Validate data
+      if (!vitals || vitals.length === 0) {
+        console.warn('⚠️ No vitals data to render');
+        return;
+      }
+      
       const labels = vitals.map(v => formatChartTime(v.waktu));
       
+      // ✅ Chart options
       const opts = {
         responsive: true,
-        maintainAspectRatio: false,
+        maintainAspectRatio: true,
         plugins: {
           legend: { 
-            display: true,
+            display: true, 
             position: 'top',
-            labels: { boxWidth: 12, padding: 10, font: { size: 11 } }
+            labels: { 
+              boxWidth: 12, 
+              padding: 10, 
+              font: { size: 11 } 
+            } 
           },
           tooltip: { 
             backgroundColor: 'rgba(0, 0, 0, 0.8)', 
@@ -4488,96 +4736,204 @@ function refreshCharts() {
           }
         }
       };
-
-      // Heart Rate Chart
-      charts.hr = new Chart(document.getElementById('heart-rate-chart'), {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Heart Rate',
-            data: vitals.map(v => v.heart_rate),
-            borderColor: '#e74c3c',
-            backgroundColor: 'rgba(231, 76, 60, 0.1)',
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: opts
-      });
-
-      // Respiratory Rate Chart
-      charts.resp = new Chart(document.getElementById('respiratory-chart'), {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Respirasi',
-            data: vitals.map(v => v.respirasi),
-            borderColor: '#3498db',
-            backgroundColor: 'rgba(52, 152, 219, 0.1)',
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: opts
-      });
-
-      // Blood Pressure Chart
-      charts.bp = new Chart(document.getElementById('bp-chart'), {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [
-            {
-              label: 'Sistolik',
-              data: vitals.map(v => v.sistolik),
-              borderColor: '#e74c3c',
-              tension: 0.4
-            },
-            {
-              label: 'Diastolik',
-              data: vitals.map(v => v.diastolik),
-              borderColor: '#3498db',
-              tension: 0.4
-            }
-          ]
-        },
-        options: opts
-      });
-
-      // Glucose Chart
-      charts.glukosa = new Chart(document.getElementById('glucose-chart'), {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Glukosa',
-            data: vitals.map(v => v.glukosa),
-            borderColor: '#f39c12',
-            backgroundColor: 'rgba(243, 156, 18, 0.1)',
-            tension: 0.4,
-            fill: true
-          }]
-        },
-        options: opts
-      });
-
-      // Fall Detection Chart
-      charts.fall = new Chart(document.getElementById('fall-chart'), {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Fall Detected',
-            data: vitals.map(v => v.fall_detected ? 1 : 0),
-            backgroundColor: vitals.map(v => v.fall_detected ? '#e74c3c' : '#27ae60')
-          }]
-        },
-        options: { ...opts, scales: { y: { ...opts.scales.y, max: 1 } } }
-      });
       
-      console.log('✅ Charts rendered with', vitals.length, 'data points');
+      // ✅ CREATE HEART RATE CHART
+      try {
+        const hrCanvas = document.getElementById('heart-rate-chart');
+        if (!hrCanvas) {
+          console.error('❌ Canvas heart-rate-chart not found');
+          return;
+        }
+        
+        const hrCtx = hrCanvas.getContext('2d');
+        if (!hrCtx) {
+          console.error('❌ Cannot get 2D context for heart-rate-chart');
+          return;
+        }
+        
+        charts.hr = new Chart(hrCtx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Heart Rate',
+              data: vitals.map(v => v.heart_rate || 0),
+              borderColor: '#e74c3c',
+              backgroundColor: 'rgba(231, 76, 60, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: opts
+        });
+        console.log('✅ Heart Rate chart created');
+      } catch (err) {
+        console.error('❌ Heart Rate chart error:', err);
+      }
+      
+      // ✅ CREATE RESPIRATORY CHART
+      try {
+        const respCanvas = document.getElementById('respiratory-chart');
+        if (!respCanvas) {
+          console.error('❌ Canvas respiratory-chart not found');
+          return;
+        }
+        
+        const respCtx = respCanvas.getContext('2d');
+        if (!respCtx) {
+          console.error('❌ Cannot get 2D context for respiratory-chart');
+          return;
+        }
+        
+        charts.resp = new Chart(respCtx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Respirasi',
+              data: vitals.map(v => v.respirasi || 0),
+              borderColor: '#3498db',
+              backgroundColor: 'rgba(52, 152, 219, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: opts
+        });
+        console.log('✅ Respiratory chart created');
+      } catch (err) {
+        console.error('❌ Respiratory chart error:', err);
+      }
+      
+      // ✅ CREATE BLOOD PRESSURE CHART
+      try {
+        const bpCanvas = document.getElementById('bp-chart');
+        if (!bpCanvas) {
+          console.error('❌ Canvas bp-chart not found');
+          return;
+        }
+        
+        const bpCtx = bpCanvas.getContext('2d');
+        if (!bpCtx) {
+          console.error('❌ Cannot get 2D context for bp-chart');
+          return;
+        }
+        
+        charts.bp = new Chart(bpCtx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Sistolik',
+                data: vitals.map(v => v.sistolik || 0),
+                borderColor: '#e74c3c',
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              },
+              {
+                label: 'Diastolik',
+                data: vitals.map(v => v.diastolik || 0),
+                borderColor: '#3498db',
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6
+              }
+            ]
+          },
+          options: opts
+        });
+        console.log('✅ Blood Pressure chart created');
+      } catch (err) {
+        console.error('❌ Blood Pressure chart error:', err);
+      }
+      
+      // ✅ CREATE GLUCOSE CHART
+      try {
+        const glucoseCanvas = document.getElementById('glucose-chart');
+        if (!glucoseCanvas) {
+          console.error('❌ Canvas glucose-chart not found');
+          return;
+        }
+        
+        const glucoseCtx = glucoseCanvas.getContext('2d');
+        if (!glucoseCtx) {
+          console.error('❌ Cannot get 2D context for glucose-chart');
+          return;
+        }
+        
+        charts.glukosa = new Chart(glucoseCtx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Glukosa',
+              data: vitals.map(v => v.glukosa || 0),
+              borderColor: '#f39c12',
+              backgroundColor: 'rgba(243, 156, 18, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 4,
+              pointHoverRadius: 6
+            }]
+          },
+          options: opts
+        });
+        console.log('✅ Glucose chart created');
+      } catch (err) {
+        console.error('❌ Glucose chart error:', err);
+      }
+      
+      // ✅ CREATE FALL DETECTION CHART
+      try {
+        const fallCanvas = document.getElementById('fall-chart');
+        if (!fallCanvas) {
+          console.error('❌ Canvas fall-chart not found');
+          return;
+        }
+        
+        const fallCtx = fallCanvas.getContext('2d');
+        if (!fallCtx) {
+          console.error('❌ Cannot get 2D context for fall-chart');
+          return;
+        }
+        
+        charts.fall = new Chart(fallCtx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Fall Detected',
+              data: vitals.map(v => v.fall_detected ? 1 : 0),
+              backgroundColor: vitals.map(v => v.fall_detected ? '#e74c3c' : '#27ae60')
+            }]
+          },
+          options: {
+            ...opts,
+            scales: {
+              ...opts.scales,
+              y: { 
+                ...opts.scales.y,
+                max: 1,
+                ticks: { 
+                  ...opts.scales.y.ticks,
+                  stepSize: 1
+                }
+              }
+            }
+          }
+        });
+        console.log('✅ Fall Detection chart created');
+      } catch (err) {
+        console.error('❌ Fall Detection chart error:', err);
+      }
+      
+      console.log('✅ All charts rendered successfully');
     }
     // ============================================================
     // AUTO REFRESH
