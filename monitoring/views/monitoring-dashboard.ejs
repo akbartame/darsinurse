@@ -792,11 +792,7 @@
         .footer p {
           font-size: 12px;
         }
-        .chart-filter-controls {
-          grid-template-columns: 1fr;
-          gap: 10px;
-        }
-
+        
         .filter-group {
           width: 100%;
         }
@@ -1489,28 +1485,11 @@
 }
 
 /* ============================================================ */
-/* RESPONSIVE - TABLET (max-width: 1024px) */
-/* ============================================================ */
-
-@media (max-width: 1024px) {
-  .chart-filter-controls {
-    grid-template-columns: repeat(2, 1fr) 150px 150px;
-    gap: 10px;
-  }
-}
-
-/* ============================================================ */
 /* RESPONSIVE - MOBILE (max-width: 768px) */
 /* ============================================================ */
 
 
 @media (max-width: 768px) {
-  .chart-filter-controls {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    border-radius: 10px 10px 0 0;
-  }
-
   .quick-filters {
     border-radius: 0;
     gap: 6px;
@@ -1690,53 +1669,15 @@
 
 .chart-filter-controls {
   display: grid;
-  grid-template-columns: 1fr 1fr 150px 150px 150px;
-  gap: 12px;
+  grid-template-columns: repeat(2, 1fr) repeat(3, auto);
+  gap: 8px;
   align-items: end;
-  padding: 15px;
+  padding: 12px;
   background: linear-gradient(135deg, #f9f9f9, #ffffff);
   border-radius: 10px 10px 0 0;
   border: 1px solid #e0e0e0;
   border-bottom: none;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  overflow: hidden;  /* ← TAMBAH INI */
-}
-
-/* ✅ Laptop: lebih compact */
-@media (min-width: 1200px) {
-  .chart-filter-controls {
-    grid-template-columns: 1fr 1fr 150px 150px 150px;
-    gap: 10px;
-    padding: 12px;
-  }
-  
-  .filter-input {
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-  
-  .filter-btn {
-    padding: 8px 10px;
-    font-size: 12px;
-    min-height: 36px;
-  }
-}
-
-@media (min-width: 1400px) {
-  .chart-filter-controls {
-    grid-template-columns: 1fr 1fr 160px 160px 160px;
-    gap: 12px;
-  }
-  
-  .filter-input {
-    padding: 9px 11px;
-    font-size: 13px;
-  }
-  
-  .filter-btn {
-    padding: 9px 14px;
-    font-size: 13px;
-  }
 }
 
 .filter-group {
@@ -1762,9 +1703,9 @@
   background: white;
   transition: all 0.3s;
   font-family: 'Segoe UI', sans-serif;
-  width: 100%;  /* ← PASTIKAN INI ADA */
-  max-width: 100%;  /* ← TAMBAH INI */
-  box-sizing: border-box;  /* ← TAMBAH INI */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .filter-input:focus {
@@ -1777,7 +1718,7 @@
   background: var(--primary-green);
   color: white;
   border: none;
-  padding: 10px 14px;  /* ← KURANGI dari 18px jadi 14px */
+  padding: 10px 12px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
@@ -1790,7 +1731,6 @@
   white-space: nowrap;
   min-height: 40px;
   box-shadow: 0 2px 8px rgba(0, 177, 79, 0.2);
-  max-width: 150px;  /* ← TAMBAH INI */
 }
 
 .filter-btn:hover {
@@ -1812,28 +1752,96 @@
   background: #5a6268;
 }
 
-/* Quick filter buttons */
+/* Laptop optimization */
+@media (min-width: 1200px) {
+  .chart-filter-controls {
+    grid-template-columns: 180px 180px repeat(3, auto);
+    gap: 10px;
+    padding: 12px 15px;
+  }
+  
+  .filter-btn {
+    padding: 10px 14px;
+    min-width: 110px;
+  }
+}
+
+/* Large screens */
+@media (min-width: 1400px) {
+  .chart-filter-controls {
+    grid-template-columns: 200px 200px repeat(3, auto);
+    gap: 12px;
+    padding: 14px 18px;
+  }
+  
+  .filter-btn {
+    padding: 10px 16px;
+    min-width: 120px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .chart-filter-controls {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+  
+  .filter-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+  }
+}
+
 .quick-filters {
   display: flex;
   gap: 8px;
   flex-wrap: nowrap;
   padding: 12px 15px;
   background: #f0f8f7;
-  border-radius: 0;  /* ← Hapus border radius */
-  margin-bottom: 0;  /* ← Hilangkan margin */
+  border-radius: 0;
+  margin-bottom: 0;
   overflow-x: auto;
   border: 1px solid #e0e0e0;
-  border-bottom: none;  /* ← Hilangkan border bawah */
+  border-bottom: none;
   border-top: 1px solid #e0e0e0;
 }
 
-/* ✅ Laptop: inline, tidak wrap */
+.quick-filter-btn {
+  background: white;
+  color: var(--primary-green);
+  border: 2px solid var(--primary-green);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.quick-filter-btn:hover {
+  background: #e6f9e6;
+  box-shadow: 0 2px 6px rgba(0, 177, 79, 0.2);
+}
+
+.quick-filter-btn.active {
+  background: var(--primary-green);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 177, 79, 0.3);
+}
+
+/* Laptop - inline without wrap */
 @media (min-width: 1200px) {
   .quick-filters {
     flex-wrap: nowrap;
     gap: 6px;
     padding: 10px 12px;
     justify-content: center;
+    overflow-x: visible;
   }
   
   .quick-filter-btn {
@@ -1856,69 +1864,18 @@
   }
 }
 
-.quick-filter-btn {
-  background: white;
-  color: var(--primary-green);
-  border: 2px solid var(--primary-green);
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  flex: 0 1 auto;
-}
-
-.quick-filter-btn:hover {
-  background: #e6f9e6;
-  box-shadow: 0 2px 6px rgba(0, 177, 79, 0.2);
-}
-
-.quick-filter-btn.active {
-  background: var(--primary-green);
-  color: white;
-  box-shadow: 0 4px 12px rgba(0, 177, 79, 0.3);
-}
-
-/* Mobile responsive */
+/* Mobile */
 @media (max-width: 768px) {
-  .chart-filter-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .filter-group {
-    width: 100%;
-  }
-  
-  .filter-input {
-    flex: 1;
-  }
-  
-  .filter-btn {
-    width: 100%;
-    justify-content: center;
-  }
-  
   .quick-filters {
-    width: 100%;
+    border-radius: 0;
+    gap: 6px;
+    overflow-x: auto;
   }
-  
-  .quick-filter-btn {
-    flex: 1;
-  }
-}
-@media (min-width: 1200px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
 
-@media (max-width: 768px) {
-  .charts-grid {
-    grid-template-columns: 1fr;
-    padding: 15px;
-    border-radius: 0 0 10px 10px;
+  .quick-filter-btn {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    font-size: 11px;
   }
 }
 /* ============================================================ */
@@ -1930,14 +1887,6 @@
   .charts-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 18px;
-  }
-}
-
-/* 4K: tetap 2 kolom tapi gap lebih besar */
-@media (min-width: 1920px) {
-  .charts-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
   }
 }
 
