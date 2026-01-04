@@ -3276,15 +3276,33 @@ function updateChartsRealtime(vitals, timestamp) {
       console.log('👁️ Opening detail view for EMR:', emr_no);
       currentPatientEMR = emr_no;
       
-      // ✅ Get room_id dari table
-      const row = document.querySelector(`tr:has(td:contains('${emr_no}'))`);
-      if (row) {
-        const roomCell = row.querySelectorAll('td')[5];
-        currentPatientRoom = roomCell.textContent.trim();
-        console.log('📍 Room:', currentPatientRoom);
-        
-        // Join room untuk updates
-        socket.emit('join-patient-room', { room_id: currentPatientRoom });
+      // ✅ FIX: Cari row dengan cara yang benar (tanpa :has dan :contains)
+      const rows = document.querySelectorAll('.patients-table tbody tr');
+      let currentPatientRow = null;
+      
+      rows.forEach(row => {
+        const firstCell = row.querySelector('td:first-child strong');
+        if (firstCell && firstCell.textContent.trim() === emr_no.toString()) {
+          currentPatientRow = row;
+        }
+      });
+      
+      if (currentPatientRow) {
+        const cells = currentPatientRow.querySelectorAll('td');
+        const roomCell = cells[5]; // Column index untuk Ruangan
+        if (roomCell) {
+          // Extract room_id dari badge
+          const roomBadge = roomCell.querySelector('.badge');
+          if (roomBadge) {
+            currentPatientRoom = roomBadge.textContent.trim();
+            console.log('📍 Room:', currentPatientRoom);
+            
+            // Join room untuk updates
+            socket.emit('join-patient-room', { room_id: currentPatientRoom });
+          }
+        }
+      } else {
+        console.warn('⚠️ Row not found for EMR:', emr_no);
       }
       
       document.getElementById('list-view').classList.remove('active');

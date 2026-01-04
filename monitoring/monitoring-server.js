@@ -731,15 +731,17 @@ app.get('/api/statistics/today', requireAdminOrPerawat, async (req, res) => {
     
     // ===== MEASUREMENTS =====
     let measurementQuery = `SELECT COUNT(*) as total FROM vitals v
-                            LEFT JOIN kunjungan k ON v.id_kunjungan = k.id_kunjungan
                             WHERE v.waktu >= ? AND v.waktu < ?`;
     let measurementParams = [today, tomorrow];
-    
+
     if (req.session.role !== 'admin') {
-      measurementQuery += ` AND k.emr_perawat = ?`;
+      // ✅ FIX: Gunakan subquery untuk filter berdasarkan perawat
+      measurementQuery += ` AND v.emr_no IN (
+        SELECT DISTINCT emr_no FROM kunjungan WHERE emr_perawat = ?
+      )`;
       measurementParams.push(req.session.emr_perawat);
     }
-    
+
     const [measurements] = await conn.query(measurementQuery, measurementParams);
     
     // ===== ACTIVE VISITS =====
