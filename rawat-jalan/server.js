@@ -73,7 +73,7 @@ async function initDatabase() {
     // Tabel PASIEN
     await conn.query(`
       CREATE TABLE IF NOT EXISTS pasien (
-        emr_no VARCHAR(11) PRIMARY KEY
+        emr_no VARCHAR(11) PRIMARY KEY,
         nama VARCHAR(100),
         tanggal_lahir DATE,
         jenis_kelamin ENUM('L','P'),
