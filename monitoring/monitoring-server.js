@@ -715,12 +715,12 @@ app.get('/api/visits/today', requireAdminOrPerawat, async (req, res) => {
         k.status,
         pas.nama as nama_pasien,
         pr.nama as nama_perawat,
-        dok.nama as nama_dokter,
+        dokter.nama as nama_dokter,
         COUNT(v.id) as total_measurements
        FROM kunjungan k
        JOIN pasien pas ON k.emr_no = pas.emr_no
        JOIN perawat pr ON k.emr_perawat = pr.emr_perawat
-       LEFT JOIN perawat dok ON k.emr_dokter = dok.emr_perawat
+       LEFT JOIN dokter ON k.emr_dokter = dokter.emr_dokter
        LEFT JOIN vitals v ON k.id_kunjungan = v.id_kunjungan
        WHERE k.tanggal_kunjungan >= ? AND k.tanggal_kunjungan < ?
     `;
@@ -1018,12 +1018,12 @@ app.get('/api/patients/inpatient/list', requireAdminOrPerawat, async (req, res) 
       // Asumsi: emr_dokter juga referensi ke tabel perawat
       if (p.emr_dokter) {
         const [dokter] = await conn.query(
-          'SELECT nama FROM perawat WHERE emr_perawat = ?',
+          'SELECT nama FROM dokter WHERE emr_dokter = ?',
           [p.emr_dokter]
         );
         namadokter = dokter[0]?.nama || 'Belum ditentukan';
-      }
-      
+      }      
+
       let status_fall = 'Tidak Ada Data';
       if (p.fall_detected === 1) {
         status_fall = 'Terdeteksi Fall';
@@ -1158,11 +1158,12 @@ app.get('/api/patients/inpatient/:emr_no', requireAdminOrPerawat, async (req, re
     // ✅ FIXED: Get dokter dari emr_dokter di kunjungan
     if (patientData.emr_dokter) {
       const [dokter] = await conn.query(
-        'SELECT nama FROM perawat WHERE emr_perawat = ?',
+        'SELECT nama FROM dokter WHERE emr_dokter = ?',
         [patientData.emr_dokter]
       );
       namadokter = dokter[0]?.nama || 'Belum ditentukan';
     }
+
     
     conn.release();
     
