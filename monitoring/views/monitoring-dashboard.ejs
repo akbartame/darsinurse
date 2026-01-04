@@ -3785,15 +3785,55 @@ function showRawatJalanDetail(visitId, emrNo, namaPasien) {
   currentVisitId = visitId;
   currentPatientEMRJalan = emrNo;
   
-  // Hide table, show detail
-  document.getElementById('rawat-jalan').querySelector('.data-container:nth-of-type(1)').style.display = 'none';
-  document.getElementById('rawat-jalan').querySelector('.data-container:nth-of-type(2)').style.display = 'none';
+  // ✅ FIXED: Hide all data containers properly
+  const rawatJalanTab = document.getElementById('rawat-jalan');
+  const dataContainers = rawatJalanTab.querySelectorAll('.data-container');
+  dataContainers.forEach(container => {
+    container.style.display = 'none';
+  });
+  
+  // Hide info box
+  const infoBox = rawatJalanTab.querySelector('.info-box');
+  if (infoBox) {
+    infoBox.style.display = 'none';
+  }
+  
+  // Show detail view
   document.getElementById('rawat-jalan-detail-view').style.display = 'block';
   
   // Load data
   loadRawatJalanPatientDetail(emrNo, visitId);
   loadRawatJalanMeasurements(emrNo);
   loadRawatJalanChart(emrNo);
+}
+
+function backToRawatJalanList() {
+  currentVisitId = null;
+  currentPatientEMRJalan = null;
+  
+  // Destroy charts
+  Object.values(chartsJalan).forEach(chart => {
+    if (chart) chart.destroy();
+  });
+  chartsJalan = {};
+  
+  // Show table, hide detail
+  const rawatJalanTab = document.getElementById('rawat-jalan');
+  const dataContainers = rawatJalanTab.querySelectorAll('.data-container');
+  dataContainers.forEach(container => {
+    container.style.display = 'block';
+  });
+  
+  // Show info box
+  const infoBox = rawatJalanTab.querySelector('.info-box');
+  if (infoBox) {
+    infoBox.style.display = 'block';
+  }
+  
+  // Hide detail
+  document.getElementById('rawat-jalan-detail-view').style.display = 'none';
+  
+  loadRawatJalanData();
 }
 
 function backToRawatJalanList() {
