@@ -888,7 +888,7 @@
             </div>
             <div class="card-body">
               <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i> Pasien dengan EMR <strong id="new-patient-emr-display"></strong> belum terdaftar. Silakan lengkapi data pasien.
+                <i class="fas fa-info-circle"></i> EMR akan di-generate otomatis dengan format <strong>YYYYMMDDNNN</strong>
               </div>
               <form id="form-pasien-baru">
                 <div class="mb-3">
@@ -2023,7 +2023,7 @@
         const idKunjungan = currentVisits.glucose;
 
         if (value && emrPasien && idKunjungan) {
-          const success = await sendToServer('glukosa', emrPasien, idKunjungan, value.toString()); // ✅ KIRIM DOKTER
+          const success = await sendToServer('glukosa', String(emrPasien), idKunjungan, value.toString()); // ✅ KIRIM DOKTER
           if (success) {
             alert('Data Glukosa berhasil disimpan!');
             setTimeout(() => {
@@ -2045,7 +2045,7 @@
         const idKunjungan = currentVisits.bp;
 
         if (value && emrPasien && idKunjungan) {
-          const success = await sendToServer('tensimeter', emrPasien, idKunjungan, value); 
+          const success = await sendToServer('tensimeter', String(emrPasien), idKunjungan, value); 
           if (success) {
             alert('Data Tekanan Darah berhasil disimpan!');
             setTimeout(() => {
@@ -2067,7 +2067,7 @@
         const idKunjungan = currentVisits.hr;
 
         if (value && emrPasien && idKunjungan) {
-          const success = await sendToServer('heart_rate', emrPasien, idKunjungan, value.toString());
+          const success = await sendToServer('heart_rate', String(emrPasien), idKunjungan, value.toString());
           if (success) {
             alert('Data Heart Rate berhasil disimpan!');
             setTimeout(() => {
@@ -2091,9 +2091,9 @@
         const idKunjungan = currentVisits.weight;
 
         if (weight && bmi && height && emrPasien && idKunjungan) {
-          const okWeight = await sendToServer('timbangan', emrPasien, idKunjungan, weight);
-          const okHeight = await sendToServer('tinggi', emrPasien, idKunjungan, height);
-          const okBmi = await sendToServer('bmi', emrPasien, idKunjungan, bmi);
+          const okWeight = await sendToServer('timbangan', String(emrPasien), idKunjungan, weight);
+          const okHeight = await sendToServer('tinggi', String(emrPasien), idKunjungan, height);
+          const okBmi = await sendToServer('bmi', String(emrPasien), idKunjungan, bmi);
 
           if (okWeight && okHeight && okBmi) {
             alert('Data Berat, Tinggi, dan BMI berhasil disimpan!');
@@ -2123,7 +2123,7 @@
         e.preventDefault();
         const emrPasien = document.getElementById('new-emr-pasien').value.trim();
         const keluhan = document.getElementById('new-keluhan').value.trim();
-        const emrDokter = document.getElementById('new-emr-dokter').value; 
+        const emrDokter = document.getElementById('new-emr-dokter').value;
         
         if (!emrPasien) {
           showStatus('kunjungan', '✗ EMR Pasien harus diisi', 'danger');
@@ -2147,15 +2147,19 @@
           const response = await fetch('/api/visits', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ emr_no: emrInt, keluhan: keluhan || '',emr_dokter: emrDokter ? parseInt(emrDokter) : null})
+            body: JSON.stringify({ 
+              emr_no: String(emrPasien),  // ✅ Kirim sebagai STRING
+              keluhan: keluhan || '',
+              emr_dokter: emrDokter ? parseInt(emrDokter) : null
+            })
           });
           
           const result = await response.json();
           if (result.success) {
             const newIdKunjungan = result.id_kunjungan;
             showStatus('kunjungan', `✓ Kunjungan berhasil dibuat! ID: ${newIdKunjungan}`, 'success');
-            addLog(`✓ Kunjungan ID ${newIdKunjungan} berhasil dibuat`, 'success');
-            alert(`✓ Kunjungan berhasil dibuat!\n\nID Kunjungan: ${newIdKunjungan}\nEMR Pasien: ${emrInt}\n\nAnda bisa langsung melakukan pengukuran.`);
+            addLog(`✓ Kunjungan ID ${newIdKunjungan} dibuat untuk EMR ${emrPasien}`, 'success');
+            alert(`✓ Kunjungan berhasil dibuat!\n\nID Kunjungan: ${newIdKunjungan}\nEMR Pasien: ${emrPasien}\n\nAnda bisa langsung melakukan pengukuran.`);
             document.getElementById('form-kunjungan').reset();
             document.getElementById('kunjungan-patient-info').innerHTML = '';
             setTimeout(() => backToMenu(), 1000);
@@ -2167,15 +2171,19 @@
           showStatus('kunjungan', `✗ Network Error: ${err.message}`, 'danger');
         }
       });
-
       // Auto-validate patient when EMR is entered
-    document.getElementById('new-emr-pasien').addEventListener('blur', async function() {
-      const emr = parseInt(this.value);
-      if (emr && !isNaN(emr)) {
-        await validatePatient(emr, 'kunjungan');
-      }
-    });
-
+      document.getElementById('new-emr-pasien').addEventListener('blur', async function() {
+        const emr = this.value.trim();
+        if (emr) {
+          // ✅ Validasi dengan format YYYYMMDDNNN (11 karakter)
+          if (!/^\d{11}$/.test(emr)) {
+            document.getElementById('kunjungan-patient-info').innerHTML = 
+              `<div class="alert alert-danger mt-2">✗ EMR harus format 11 digit (YYYYMMDDNNN)</div>`;
+            return;
+          }
+          await validatePatient(emr, 'kunjungan');
+        }
+      });
       // Cancel pasien baru
       document.getElementById('btn-cancel-pasien-baru').addEventListener('click', function() {
         document.getElementById('card-pasien-baru').classList.remove('active');
@@ -2188,11 +2196,11 @@
       // Submit pasien baru
       document.getElementById('form-pasien-baru').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const nama = document.getElementById('pasien-baru-nama').value;
+        const nama = document.getElementById('pasien-baru-nama').value.trim();
         const tglLahir = document.getElementById('pasien-baru-tgl-lahir').value;
         const jk = document.getElementById('pasien-baru-jk').value;
         const poli = document.getElementById('pasien-baru-poli').value;
-        const alamat = document.getElementById('pasien-baru-alamat').value;
+        const alamat = document.getElementById('pasien-baru-alamat').value.trim();
         
         if (!nama || !tglLahir || !jk || !poli) {
           showStatus('pasien-baru', '✗ Semua field wajib harus diisi', 'danger');
@@ -2209,7 +2217,8 @@
               tanggal_lahir: tglLahir,
               jenis_kelamin: jk,
               poli: poli,
-              alamat: alamat
+              alamat: alamat || ''
+              // ✅ TIDAK kirim emr_no, biar server yang generate
             })
           });
           
@@ -2217,15 +2226,39 @@
           if (result.success) {
             const newEmrNo = result.emr_no;
             showStatus('pasien-baru', `✓ Pasien berhasil didaftarkan! EMR: ${newEmrNo}`, 'success');
-            addLog(`Pasien baru terdaftar: ${nama} (EMR: ${newEmrNo})`, 'success');
-            alert(`Pasien berhasil didaftarkan!\n\nNama: ${nama}\nEMR: ${newEmrNo}\nPoli: ${poli}\n\nEMR ini akan otomatis terisi di form kunjungan.`);
+            addLog(`✓ Pasien baru: ${nama} (EMR: ${newEmrNo})`, 'success');
+            
+            // ✅ Tampilkan EMR yang di-generate
+            alert(`✓ Pasien berhasil didaftarkan!\n\nNama: ${nama}\nEMR: ${newEmrNo}\nPoli: ${poli}\n\nEMR ini akan otomatis terisi di form kunjungan.`);
             
             document.getElementById('form-pasien-baru').reset();
             document.getElementById('pasien-baru-status').innerHTML = '';
             document.getElementById('card-pasien-baru').classList.remove('active');
             document.getElementById('card-kunjungan').classList.add('active');
             document.getElementById('new-emr-pasien').value = newEmrNo;
-            await validatePatient(newEmrNo, 'kunjungan');
+            await validatePatient(parseInt(newEmrNo), 'kunjungan');
+          } else {
+            showStatus('pasien-baru', `✗ Error: ${result.error}`, 'danger');
+            addLog(`❌ Error: ${result.error}`, 'error');
+          }
+        } catch (err) {
+          showStatus('pasien-baru', `✗ Error: ${err.message}`, 'danger');
+          addLog(`❌ Network error: ${err.message}`, 'error');
+        }
+      });          
+          const result = await response.json();
+          if (result.success) {
+            const newEmrNo = result.emr_no;
+            showStatus('pasien-baru', `✓ Pasien berhasil didaftarkan! EMR: ${newEmrNo}`, 'success');
+            addLog(`Pasien baru: ${nama} (EMR: ${newEmrNo})`, 'success');
+            alert(`✓ Pasien berhasil didaftarkan!\n\nNama: ${nama}\nEMR: ${newEmrNo}\nPoli: ${poli}`);
+            
+            document.getElementById('form-pasien-baru').reset();
+            document.getElementById('pasien-baru-status').innerHTML = '';
+            document.getElementById('card-pasien-baru').classList.remove('active');
+            document.getElementById('card-kunjungan').classList.add('active');
+            document.getElementById('new-emr-pasien').value = newEmrNo;
+            await validatePatient(parseInt(newEmrNo), 'kunjungan');
           } else {
             showStatus('pasien-baru', `✗ Error: ${result.error}`, 'danger');
           }
@@ -2233,7 +2266,6 @@
           showStatus('pasien-baru', `✗ Error: ${err.message}`, 'danger');
         }
       });
-
       // Browser check
       if (!navigator.bluetooth) {
         addLog('⚠ Browser tidak mendukung Web Bluetooth API', 'error');

@@ -648,14 +648,15 @@ async function checkAndBroadcastFall(vitalsId, emrNo) {
     return false;
   }
 }
-// ✅ FIXED: /simpan_data - SESUAI URUTAN KOLOM ASLI TABEL
-// ✅ FIXED: /simpan_data - TIDAK INSERT emr_perawat/emr_dokter ke vitals
+
 app.post('/simpan_data', requireLogin, async (req, res) => {
   const { id_kunjungan, emr_no, tipe_device, data } = req.body;  
   const idInt = parseInt(id_kunjungan);
-  const emrInt = parseInt(emr_no);
+  
+  // ✅ Format EMR sebagai VARCHAR(11)
+  const emrStr = String(emr_no).padStart(11, '0');
 
-  if (isNaN(idInt) || isNaN(emrInt) || !tipe_device || !data) {
+  if (isNaN(idInt) || !emrStr || !tipe_device || !data) {
     return res.status(400).json({ error: 'Data tidak lengkap atau tidak valid' });
   }
 
@@ -663,10 +664,10 @@ app.post('/simpan_data', requireLogin, async (req, res) => {
   try {
     conn = await pool.getConnection();
     
-    // ✅ Verifikasi kunjungan exists
+    // ✅ Verifikasi kunjungan exists dengan emr_no sebagai VARCHAR
     const [kunjunganCheck] = await conn.query(
       'SELECT id_kunjungan FROM kunjungan WHERE id_kunjungan = ? AND emr_no = ?',
-      [idInt, emrInt]
+      [idInt, emrStr]
     );
     
     if (kunjunganCheck.length === 0) {
@@ -1265,29 +1266,78 @@ app.post('/api/patients/register', requireLogin, async (req, res) => {
   
   if (!nama || !tanggal_lahir || !jenis_kelamin || !poli) {
     return res.status(400).json({ 
+      success: false,
       error: 'Nama, Tanggal Lahir, Jenis Kelamin, dan Poli harus diisi' 
     });
   }
 
+  if (!['L', 'P'].includes(jenis_kelamin)) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'Jenis Kelamin harus L atau P' 
+    });
+  }
+
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
     
+    // ✅ Generate EMR dengan format YYYYMMDDNNN
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const datePrefix = `${year}${month}${day}`;  // Contoh: 20251225
+    
+    // Cari EMR terbaru untuk hari ini
+    const [lastEmrToday] = await conn.query(`
+      SELECT emr_no 
+      FROM pasien 
+      WHERE emr_no LIKE ? 
+      ORDER BY emr_no DESC 
+      LIMIT 1
+    `, [`${datePrefix}%`]);
+    
+    // Tentukan nomor urut (NNN)
+    let nextNumber = 1;
+    if (lastEmrToday.length > 0) {
+      const lastEmr = lastEmrToday[0].emr_no;
+      const lastNumber = parseInt(lastEmr.substring(8));  // Ambil 3 digit terakhir
+      nextNumber = lastNumber + 1;
+    }
+    
+    const numberStr = String(nextNumber).padStart(3, '0');
+    const emrNo = `${datePrefix}${numberStr}`;  // Contoh: 20251225001
+    
+    // Insert pasien dengan EMR yang sudah di-generate
     const [result] = await conn.query(
-      'INSERT INTO pasien (nama, tanggal_lahir, jenis_kelamin, poli, alamat) VALUES (?, ?, ?, ?, ?)',
-      [nama, tanggal_lahir, jenis_kelamin, poli, alamat || '']
+      'INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat) VALUES (?, ?, ?, ?, ?, ?)',
+      [emrNo, nama, tanggal_lahir, jenis_kelamin, poli, alamat || '']
     );
     
     conn.release();
     
-    const newEmrNo = result.insertId;
+    console.log(`✓ Patient registered: EMR ${emrNo}, Name: ${nama}`);
     
     res.json({ 
       success: true, 
       message: 'Pasien berhasil didaftarkan',
-      emr_no: newEmrNo
+      emr_no: emrNo
     });
   } catch (err) {
+    if (conn) conn.release();
+    
+    console.error('❌ Register error:', err.message, err.code);
+    
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'EMR sudah terdaftar' 
+      });
+    }
+    
     res.status(500).json({ 
+      success: false,
       error: 'Database error: ' + err.message 
     });
   }
@@ -1405,27 +1455,47 @@ app.get('/api/patients/:emr/visits', requireLogin, async (req, res) => {
 });
 
 app.post('/api/visits', requireLogin, async (req, res) => {
-  const { emr_no, keluhan, emr_dokter} = req.body;
+  const { emr_no, keluhan, emr_dokter } = req.body;
   
-  const emrInt = parseInt(emr_no);
-  const emrDokterInt = emr_dokter ? parseInt(emr_dokter) : null;
-  
-  if (isNaN(emrInt)) {
-    return res.status(400).json({ error: 'EMR Pasien harus berupa angka' });
+  if (!emr_no) {
+    return res.status(400).json({ 
+      success: false,
+      error: 'EMR Pasien harus diisi' 
+    });
   }
 
+  // ✅ EMR sudah format YYYYMMDDNNN dari frontend
+  const emrStr = String(emr_no);
+  const emrDokterInt = emr_dokter ? parseInt(emr_dokter) : null;
+  
+  let conn;
   try {
-    const conn = await pool.getConnection();
+    conn = await pool.getConnection();
+    
+    // Cek pasien exists
+    const [pasienCheck] = await conn.query(
+      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      [emrStr]
+    );
+    
+    if (pasienCheck.length === 0) {
+      conn.release();
+      return res.status(404).json({ 
+        success: false,
+        error: 'Pasien EMR ' + emr_no + ' tidak ditemukan' 
+      });
+    }
     
     const [result] = await conn.query(
-      'INSERT INTO kunjungan (emr_no, emr_perawat, keluhan, status, emr_dokter) VALUES (?, ?, ?, ?, ?)', // ✅ Tambah emr_dokter
-      [emrInt, req.session.emr_perawat, keluhan || '', 'aktif', emrDokterInt] // ✅ Tambah value
+      'INSERT INTO kunjungan (emr_no, emr_perawat, keluhan, status, emr_dokter) VALUES (?, ?, ?, ?, ?)',
+      [emrStr, req.session.emr_perawat, keluhan || '', 'aktif', emrDokterInt]
     );
 
-    
     conn.release();
     
     const newIdKunjungan = result.insertId;
+    
+    console.log(`✓ Visit created: ID ${newIdKunjungan}, EMR ${emrStr}`);
     
     res.json({ 
       success: true, 
@@ -1433,7 +1503,12 @@ app.post('/api/visits', requireLogin, async (req, res) => {
       id_kunjungan: newIdKunjungan
     });
   } catch (err) {
-    res.status(500).json({ error: 'Database error: ' + err.message });
+    if (conn) conn.release();
+    console.error('❌ Create visit error:', err.message);
+    res.status(500).json({ 
+      success: false,
+      error: 'Database error: ' + err.message 
+    });
   }
 });
 
