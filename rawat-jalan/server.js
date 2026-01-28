@@ -922,12 +922,11 @@ if (!emrStr) {
 // POST /api/mcu/save - Simpan data MCU lengkap
 app.post('/api/mcu/save', requireLogin, async (req, res) => {
   const { 
-    emr_no, id_kunjungan, waktu, heart_rate, respirasi, glukosa, 
+    emr_no, waktu, heart_rate, respirasi, glukosa, 
     berat_badan_kg, tinggi_badan_cm, bmi, sistolik, diastolik, 
     kolesterol, asam_urat 
   } = req.body;
   
-  // ✅ Validasi EMR (terima angka bebas, tidak harus 11 digit)
   const emrStr = String(emr_no).trim();
   if (!emrStr) {
     return res.status(400).json({ 
@@ -936,38 +935,28 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     });
   }
   
-  // ✅ Validasi ID Kunjungan
-  const idKunjunganInt = parseInt(id_kunjungan);
-  if (!id_kunjungan || isNaN(idKunjunganInt)) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'ID Kunjungan tidak valid' 
-    });
-  }
-  
   let conn;
   try {
     conn = await pool.getConnection();
     
-    // ✅ Verifikasi kunjungan exists
-    const [kunjunganCheck] = await conn.query(
-      'SELECT id_kunjungan FROM kunjungan WHERE id_kunjungan = ? AND emr_no = ?',
-      [idKunjunganInt, emrStr]
+    // Verifikasi pasien exists
+    const [pasienCheck] = await conn.query(
+      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      [emrStr]
     );
     
-    if (kunjunganCheck.length === 0) {
+    if (pasienCheck.length === 0) {
       conn.release();
       return res.status(404).json({ 
         success: false, 
-        error: 'Kunjungan tidak ditemukan atau EMR tidak sesuai' 
+        error: 'Pasien dengan EMR ' + emrStr + ' tidak ditemukan' 
       });
     }
     
-    // ✅ Insert data MCU ke tabel vitals
+    // Insert data MCU ke tabel vitals (TANPA id_kunjungan)
     const [result] = await conn.query(`
       INSERT INTO vitals (
         emr_no, 
-        id_kunjungan,
         waktu, 
         heart_rate, 
         respirasi, 
@@ -979,10 +968,9 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
         diastolik, 
         kolesterol, 
         asam_urat
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       emrStr,
-      idKunjunganInt,
       waktu || new Date(),
       heart_rate ? parseInt(heart_rate) : null,
       respirasi ? parseInt(respirasi) : null,

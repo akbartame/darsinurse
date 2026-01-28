@@ -1195,14 +1195,6 @@
                   <div id="mcu-patient-info"></div>
                 </div>
 
-                <!-- Pilih Kunjungan -->
-                <div class="mb-3">
-                  <label class="form-label">Pilih Kunjungan</label>
-                  <select class="form-control" id="mcu-id-kunjungan" required disabled>
-                    <option value="">-- Pilih kunjungan --</option>
-                  </select>
-                </div>
-
                 <!-- Waktu -->
                 <div class="mb-3">
                   <label class="form-label">Waktu Pemeriksaan</label>
@@ -2629,7 +2621,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const emr = this.value.trim();
       if (emr.length >= 3) {
         await displayPatientInfo(emr, 'mcu');
-        await loadVisitsByPatient(emr, 'mcu');
       }
     });
 
@@ -2661,7 +2652,6 @@ document.addEventListener('DOMContentLoaded', function() {
       
       const data = {
         emr_no: document.getElementById('mcu-emr-pasien').value.trim(),
-        id_kunjungan: document.getElementById('mcu-id-kunjungan').value,
         waktu: document.getElementById('mcu-waktu').value,
         heart_rate: document.getElementById('mcu-heart-rate').value,
         respirasi: document.getElementById('mcu-respirasi').value,
