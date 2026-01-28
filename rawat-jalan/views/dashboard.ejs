@@ -1182,6 +1182,51 @@
 
         <!-- MCU FORM -->
         <div id="card-mcu" class="measurement-card">
+          <!-- FORM DAFTAR PASIEN BARU (INLINE di MCU) -->
+          <div id="mcu-patient-registration" style="display:none;" class="mb-4 p-3 border rounded bg-light">
+            <h6 class="mb-3"><i class="fas fa-user-plus"></i> Daftar Pasien Baru</h6>
+            
+            <div class="mb-2">
+              <label class="form-label">EMR Pasien</label>
+              <input type="text" class="form-control" id="mcu-new-emr" readonly style="background-color: #e9ecef;">
+            </div>
+            
+            <div class="mb-2">
+              <label class="form-label">Nama Lengkap</label>
+              <input type="text" class="form-control" id="mcu-new-nama" placeholder="Nama lengkap pasien" required>
+            </div>
+            
+            <div class="mb-2">
+              <label class="form-label">Tanggal Lahir</label>
+              <input type="date" class="form-control" id="mcu-new-tgl-lahir" required>
+            </div>
+            
+            <div class="mb-2">
+              <label class="form-label">Jenis Kelamin</label>
+              <select class="form-control" id="mcu-new-jk" required>
+                <option value="">-- Pilih --</option>
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </div>
+            
+            <div class="mb-3">
+              <label class="form-label">Alamat</label>
+              <textarea class="form-control" id="mcu-new-alamat" rows="2" placeholder="Alamat lengkap pasien"></textarea>
+            </div>
+            
+            <div class="d-grid gap-2">
+              <button type="button" class="btn btn-success" onclick="registerMCUPatient()">
+                <i class="fas fa-save"></i> Simpan Pasien
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="cancelMCUPatientForm()">
+                <i class="fas fa-times"></i> Batal
+              </button>
+            </div>
+            
+            <div id="mcu-registration-status" class="mt-2"></div>
+          </div>
+
           <div class="card">
             <div class="card-header">
               <i class="fas fa-notes-medical"></i> Medical Check Up (MCU)
@@ -1192,9 +1237,18 @@
                 <div class="mb-3">
                   <label class="form-label">EMR Pasien</label>
                   <input type="text" class="form-control" id="mcu-emr-pasien" placeholder="Masukkan EMR" required>
-                  <div id="mcu-patient-info"></div>
+                  <small class="text-muted">Ketik EMR dan tekan Enter atau klik di luar kotak</small>
+                  
+                  <!-- Patient Info Display -->
+                  <div id="mcu-patient-info" class="mt-2"></div>
+                  
+                  <!-- Button untuk tambah pasien baru -->
+                  <div id="mcu-add-patient-btn" style="display:none;" class="mt-2">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="showMCUPatientForm()">
+                      <i class="fas fa-user-plus"></i> Daftar Pasien Baru
+                    </button>
+                  </div>
                 </div>
-
                 <!-- Waktu -->
                 <div class="mb-3">
                   <label class="form-label">Waktu Pemeriksaan</label>
@@ -1220,6 +1274,12 @@
                   </div>
                 </div>
 
+                <!-- Add this after the button -->
+                <div class="mb-2">
+                  <small id="mcu-hr-status" class="text-muted"></small>
+                </div>
+
+
                 <!-- Respirasi -->
                 <div class="mb-3">
                   <label class="form-label">Respirasi (per menit)</label>
@@ -1241,6 +1301,9 @@
                     </button>
                   </div>
                 </div>
+                <div class="mb-3">
+                  <small id="mcu-glucose-status" class="text-muted"></small>
+                </div>
 
                 <!-- Berat Badan -->
                 <div class="row mb-3">
@@ -1257,6 +1320,10 @@
                     </button>
                   </div>
                 </div>
+                <div class="mb-3">
+                  <small id="mcu-weight-status" class="text-muted"></small>
+                </div>
+
 
                 <!-- Tinggi Badan -->
                 <div class="mb-3">
@@ -1288,6 +1355,9 @@
                       <i class="fa-brands fa-bluetooth"></i> Scan
                     </button>
                   </div>
+                </div>
+                <div class="mb-3">
+                  <small id="mcu-bp-status" class="text-muted"></small>
                 </div>
 
                 <!-- Kolesterol -->
@@ -1691,6 +1761,14 @@
       document.querySelectorAll('.measurement-card, .kunjungan-card').forEach(card => {
         card.classList.remove('active');
       });
+      
+      // Disconnect all MCU devices
+      Object.keys(mcuDevices).forEach(deviceType => {
+        if (mcuDevices[deviceType]) {
+          stopMCUBLE(deviceType);
+        }
+      });
+      
       addLog('Kembali ke menu pilihan', 'info');
     }
 
@@ -2489,6 +2567,23 @@ document.addEventListener('DOMContentLoaded', function() {
       addLog('Batal mendaftar pasien baru', 'info');
     });
   }
+  // ============ 14.5. MCU BLUETOOTH SCAN BUTTONS ============
+  // ============ MCU BLUETOOTH SCAN BUTTONS ============
+  document.getElementById('btn-scan-mcu-hr')?.addEventListener('click', () => {
+    scanMCUBLE('hr', HEART_RATE_SERVICE, HR_MEASUREMENT_CHAR, handleMCUHeartRate);
+  });
+
+  document.getElementById('btn-scan-mcu-glucose')?.addEventListener('click', () => {
+    scanMCUBLE('glucose', GLUCOSE_SERVICE, GLUCOSE_MEASUREMENT_CHAR, handleMCUGlucose);
+  });
+
+  document.getElementById('btn-scan-mcu-bp')?.addEventListener('click', () => {
+    scanMCUBLE('bp', BLOOD_PRESSURE_SERVICE, BP_MEASUREMENT_CHAR, handleMCUBloodPressure);
+  });
+
+  document.getElementById('btn-scan-mcu-weight')?.addEventListener('click', () => {
+    scanMCUBLE('weight', WEIGHT_SCALE_SERVICE, WEIGHT_MEASUREMENT_CHAR, handleMCUWeight);
+  });
 
   // ============ 14. BROWSER COMPATIBILITY CHECK ============
   if (!navigator.bluetooth) {
@@ -2650,8 +2745,17 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('form-mcu')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       
+      const emr = document.getElementById('mcu-emr-pasien').value.trim();
+      
+      // Validasi pasien dulu
+      const isValid = await validateMCUPatient(emr);
+      if (!isValid) {
+        alert('❌ Pasien tidak valid! Silakan daftar pasien terlebih dahulu.');
+        return;
+      }
+      
       const data = {
-        emr_no: document.getElementById('mcu-emr-pasien').value.trim(),
+        emr_no: emr,
         waktu: document.getElementById('mcu-waktu').value,
         heart_rate: document.getElementById('mcu-heart-rate').value,
         respirasi: document.getElementById('mcu-respirasi').value,
@@ -2681,6 +2785,8 @@ document.addEventListener('DOMContentLoaded', function() {
           setTimeout(() => {
             backToMenu();
             document.getElementById('form-mcu').reset();
+            document.getElementById('mcu-patient-info').innerHTML = '';
+            document.getElementById('mcu-patient-registration').style.display = 'none';
           }, 1500);
         } else {
           showStatus('mcu', `✗ Error: ${result.error}`, 'danger');
@@ -2777,6 +2883,346 @@ document.addEventListener('DOMContentLoaded', function() {
       window.open(`/api/mcu/print/${mcuId}`, '_blank');
       addLog(`Printing MCU ID: ${mcuId}`, 'success');
     });
+// ============================================
+// MCU PATIENT VALIDATION & REGISTRATION
+// ============================================
+
+// Auto-search pasien saat input EMR (update yang sudah ada)
+document.getElementById('mcu-emr-pasien')?.addEventListener('blur', async function() {
+  const emr = this.value.trim();
+  if (!emr) {
+    document.getElementById('mcu-patient-info').innerHTML = '';
+    document.getElementById('mcu-add-patient-btn').style.display = 'none';
+    return;
+  }
+  
+  await validateMCUPatient(emr);
+});
+
+// Validate MCU Patient
+async function validateMCUPatient(emr) {
+  const infoDiv = document.getElementById('mcu-patient-info');
+  const addBtnDiv = document.getElementById('mcu-add-patient-btn');
+  
+  try {
+    const response = await fetch(`/api/patients/${emr}/basic-info`);
+    const result = await response.json();
+    
+    if (result.success) {
+      const patient = result.patient;
+      const gender = patient.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan';
+      
+      infoDiv.innerHTML = `
+        <div class="patient-info">
+          ✓ <strong>${patient.nama}</strong><br>
+          <small>${gender}, ${patient.age} tahun</small>
+        </div>
+      `;
+      addBtnDiv.style.display = 'none';
+      addLog(`Pasien ditemukan: ${patient.nama} (${patient.age} tahun)`, 'success');
+      return true;
+    } else {
+      // Pasien tidak ditemukan
+      infoDiv.innerHTML = `
+        <div class="alert alert-warning">
+          <i class="fas fa-exclamation-triangle"></i> Pasien dengan EMR <strong>${emr}</strong> belum terdaftar
+        </div>
+      `;
+      addBtnDiv.style.display = 'block';
+      addLog(`Pasien EMR ${emr} tidak ditemukan`, 'error');
+      return false;
+    }
+  } catch (err) {
+    infoDiv.innerHTML = `
+      <div class="alert alert-danger">
+        <i class="fas fa-times-circle"></i> Error: ${err.message}
+      </div>
+    `;
+    addBtnDiv.style.display = 'none';
+    addLog(`Error validasi MCU: ${err.message}`, 'error');
+    return false;
+  }
+}
+
+// Show MCU Patient Registration Form
+function showMCUPatientForm() {
+  const emr = document.getElementById('mcu-emr-pasien').value.trim();
+  document.getElementById('mcu-new-emr').value = emr;
+  document.getElementById('mcu-patient-registration').style.display = 'block';
+  document.getElementById('mcu-add-patient-btn').style.display = 'none';
+  
+  // Scroll to form
+  document.getElementById('mcu-patient-registration').scrollIntoView({ 
+    behavior: 'smooth', 
+    block: 'nearest' 
+  });
+  
+  addLog('Form pendaftaran pasien MCU dibuka', 'info');
+}
+
+// Cancel MCU Patient Registration
+function cancelMCUPatientForm() {
+  document.getElementById('mcu-patient-registration').style.display = 'none';
+  document.getElementById('mcu-add-patient-btn').style.display = 'block';
+  
+  // Clear form
+  document.getElementById('mcu-new-nama').value = '';
+  document.getElementById('mcu-new-tgl-lahir').value = '';
+  document.getElementById('mcu-new-jk').value = '';
+  document.getElementById('mcu-new-alamat').value = '';
+  document.getElementById('mcu-registration-status').innerHTML = '';
+  
+  addLog('Batal mendaftar pasien MCU', 'info');
+}
+
+  // Register MCU Patient
+  async function registerMCUPatient() {
+    const emr = document.getElementById('mcu-new-emr').value.trim();
+    const nama = document.getElementById('mcu-new-nama').value.trim();
+    const tglLahir = document.getElementById('mcu-new-tgl-lahir').value;
+    const jk = document.getElementById('mcu-new-jk').value;
+    const alamat = document.getElementById('mcu-new-alamat').value.trim();
+    const statusDiv = document.getElementById('mcu-registration-status');
+    
+    if (!nama || !tglLahir || !jk) {
+      statusDiv.innerHTML = '<div class="alert alert-danger">✗ Nama, Tanggal Lahir, dan Jenis Kelamin wajib diisi</div>';
+      return;
+    }
+    
+    try {
+      statusDiv.innerHTML = '<div class="alert alert-info">⏳ Mendaftarkan pasien...</div>';
+      
+      const response = await fetch('/api/patients/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emr_no: emr,
+          nama: nama,
+          tanggal_lahir: tglLahir,
+          jenis_kelamin: jk,
+          poli: 'MCU', // Default poli untuk MCU
+          alamat: alamat || ''
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        statusDiv.innerHTML = `<div class="alert alert-success">✓ Pasien berhasil didaftarkan!</div>`;
+        addLog(`✓ Pasien MCU baru: ${nama} (EMR: ${emr})`, 'success');
+        
+        // Hide registration form and revalidate
+        setTimeout(async () => {
+          document.getElementById('mcu-patient-registration').style.display = 'none';
+          await validateMCUPatient(emr);
+        }, 1500);
+      } else {
+        statusDiv.innerHTML = `<div class="alert alert-danger">✗ ${result.error}</div>`;
+        addLog(`❌ Error: ${result.error}`, 'error');
+      }
+    } catch (err) {
+      statusDiv.innerHTML = `<div class="alert alert-danger">✗ Error: ${err.message}</div>`;
+      addLog(`❌ Network error: ${err.message}`, 'error');
+    }
+  }
+  // ============================================
+// MCU BLUETOOTH HANDLERS
+// ============================================
+
+let mcuDevices = {
+  hr: null,
+  glucose: null,
+  bp: null,
+  weight: null
+};
+
+// MCU Heart Rate Handler
+function handleMCUHeartRate(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+    let hrValue = null;
+    const flags = bytes[0];
+
+    if ((flags & 0x01) === 0) {
+      hrValue = bytes[1];
+    } else {
+      hrValue = bytes[1] | (bytes[2] << 8);
+    }
+
+    if (hrValue !== null) {
+      document.getElementById('mcu-heart-rate').value = hrValue;
+      document.getElementById('mcu-hr-source').style.display = 'block';
+      document.getElementById('mcu-hr-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Heart Rate terukur: ' + hrValue + ' bpm</span>';
+      addLog(`MCU Heart Rate terukur: ${hrValue} bpm`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU heart rate: ${err.message}`, 'error');
+  }
+}
+
+// MCU Glucose Handler
+function handleMCUGlucose(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+    let glucoseValue = null;
+
+    if (bytes.length >= 4) {
+      const glucoseBytes = [bytes[1], bytes[2], bytes[3]];
+      glucoseValue = parseSFLOAT(glucoseBytes);
+    }
+
+    if (glucoseValue !== null) {
+      glucoseValue = Math.round(glucoseValue * 10) / 10;
+      document.getElementById('mcu-glucose').value = glucoseValue.toFixed(0);
+      document.getElementById('mcu-glucose-source').style.display = 'block';
+      document.getElementById('mcu-glucose-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Glukosa terukur: ' + glucoseValue.toFixed(0) + ' mg/dL</span>';
+      addLog(`MCU Glukosa terukur: ${glucoseValue.toFixed(0)} mg/dL`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU glucose: ${err.message}`, 'error');
+  }
+}
+
+// MCU Blood Pressure Handler
+function handleMCUBloodPressure(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+
+    if (bytes.length >= 5) {
+      const systolic = parseSFLOAT([bytes[1], bytes[2], 0]);
+      const diastolic = parseSFLOAT([bytes[3], bytes[4], 0]);
+      
+      document.getElementById('mcu-sistolik').value = Math.round(systolic);
+      document.getElementById('mcu-diastolik').value = Math.round(diastolic);
+      document.getElementById('mcu-bp-source').style.display = 'block';
+      document.getElementById('mcu-bp-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Tekanan Darah terukur: ' + 
+        Math.round(systolic) + '/' + Math.round(diastolic) + ' mmHg</span>';
+      addLog(`MCU Blood Pressure terukur: ${Math.round(systolic)}/${Math.round(diastolic)} mmHg`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU blood pressure: ${err.message}`, 'error');
+  }
+}
+
+// MCU Weight Handler
+function handleMCUWeight(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+
+    if (bytes.length >= 3) {
+      const flags = bytes[0];
+      const weightRaw = bytes[1] | (bytes[2] << 8);
+      const divisor = (flags & 0x01) ? 100 : 200;
+      const weightValue = weightRaw / divisor;
+      const displayWeight = Math.round(weightValue * 10) / 10;
+      
+      document.getElementById('mcu-weight').value = displayWeight.toFixed(1);
+      document.getElementById('mcu-weight-source').style.display = 'block';
+      document.getElementById('mcu-weight-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Berat Badan terukur: ' + 
+        displayWeight.toFixed(1) + ' kg</span>';
+      
+      // Auto calculate BMI if height is filled
+      calculateMCUBMI();
+      
+      addLog(`MCU Berat Badan terukur: ${displayWeight.toFixed(1)} kg`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU weight: ${err.message}`, 'error');
+  }
+}
+
+// Generic MCU BLE Scanner
+async function scanMCUBLE(deviceType, service, characteristic, handler) {
+  if (!navigator.bluetooth) {
+    alert('Browser tidak mendukung Web Bluetooth API!\nGunakan Chrome, Edge, atau Opera.');
+    addLog('Browser tidak support Bluetooth', 'error');
+    return;
+  }
+
+  const statusId = `mcu-${deviceType}-status`;
+  const btnId = `btn-scan-mcu-${deviceType}`;
+  
+  try {
+    document.getElementById(statusId).innerHTML = 
+      '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Mencari perangkat...</span>';
+    document.getElementById(btnId).disabled = true;
+    
+    addLog(`Scanning MCU ${deviceType}...`, 'info');
+    
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [service] }],
+      optionalServices: [service]
+    });
+
+    mcuDevices[deviceType] = device;
+    
+    document.getElementById(statusId).innerHTML = 
+      '<span class="text-success"><i class="fas fa-check-circle"></i> Terhubung: ' + 
+      (device.name || 'Device') + '</span>';
+    addLog(`MCU ${deviceType} device ditemukan: ${device.name}`, 'success');
+
+    const server = await device.gatt.connect();
+    const bleService = await server.getPrimaryService(service);
+    const bleChar = await bleService.getCharacteristic(characteristic);
+    
+    await bleChar.startNotifications();
+    bleChar.addEventListener('characteristicvaluechanged', handler);
+    
+    document.getElementById(statusId).innerHTML = 
+      '<span class="text-success"><i class="fas fa-check-circle"></i> Siap menerima data - lakukan pengukuran</span>';
+    addLog(`MCU ${deviceType} siap menerima data`, 'success');
+
+    // Handle disconnect
+    device.addEventListener('gattserverdisconnected', () => {
+      document.getElementById(statusId).innerHTML = 
+        '<span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Device terputus</span>';
+      document.getElementById(btnId).disabled = false;
+      addLog(`MCU ${deviceType} terputus`, 'error');
+      mcuDevices[deviceType] = null;
+    });
+
+  } catch (err) {
+    document.getElementById(btnId).disabled = false;
+    
+    if (err.name === 'NotFoundError') {
+      document.getElementById(statusId).innerHTML = 
+        '<span class="text-danger"><i class="fas fa-times-circle"></i> Device tidak ditemukan atau dibatalkan</span>';
+      addLog(`MCU ${deviceType}: User membatalkan atau device tidak ditemukan`, 'error');
+    } else {
+      document.getElementById(statusId).innerHTML = 
+        '<span class="text-danger"><i class="fas fa-times-circle"></i> Error: ' + err.message + '</span>';
+      addLog(`MCU ${deviceType} scan error: ${err.message}`, 'error');
+    }
+  }
+}
+
+// Stop MCU BLE Connection
+function stopMCUBLE(deviceType) {
+  try {
+    if (mcuDevices[deviceType]) {
+      if (mcuDevices[deviceType].gatt && mcuDevices[deviceType].gatt.connected) {
+        mcuDevices[deviceType].gatt.disconnect();
+      }
+      mcuDevices[deviceType] = null;
+      
+      const statusId = `mcu-${deviceType}-status`;
+      document.getElementById(statusId).innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Koneksi dihentikan</span>';
+      
+      addLog(`MCU ${deviceType} koneksi dihentikan`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error disconnect MCU ${deviceType}: ${err.message}`, 'error');
+  }
+}
   </script>
 </body>
 </html>

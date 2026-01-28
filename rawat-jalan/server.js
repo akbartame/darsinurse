@@ -2016,6 +2016,60 @@ if (!emrStr) {
   }
 });
 
+// GET patient info without poli (for MCU)
+app.get('/api/patients/:emr/basic-info', requireLogin, async (req, res) => {
+  const emrStr = String(req.params.emr).trim();
+  if (!emrStr) {
+    return res.status(400).json({ error: 'EMR tidak boleh kosong' });
+  }
+  
+  try {
+    const conn = await pool.getConnection();
+    
+    const [patients] = await conn.query(
+      `SELECT 
+        emr_no, 
+        nama, 
+        tanggal_lahir,
+        jenis_kelamin, 
+        alamat
+      FROM pasien 
+      WHERE emr_no = ?`,
+      [emrStr]
+    );
+    
+    conn.release();
+    
+    if (patients.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Pasien tidak ditemukan' 
+      });
+    }
+    
+    // Calculate age
+    const patient = patients[0];
+    const birthDate = new Date(patient.tanggal_lahir);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    res.json({ 
+      success: true, 
+      patient: {
+        ...patient,
+        age: age
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error: ' + err.message });
+  }
+});
+
+
 /* ============================================================
    VISIT ROUTES
    ============================================================ */
