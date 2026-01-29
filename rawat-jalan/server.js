@@ -1045,13 +1045,17 @@ if (!emrStr) {
 // POST /api/mcu/save - Simpan data MCU lengkap
 app.post('/api/mcu/save', requireLogin, async (req, res) => {
   const { 
+    pelayanan_id,
     emr_no, 
-    pelayanan_id,  // ← TAMBAH INI
+    nama_pasien,  // ← TAMBAH parameter ini dari frontend
+    tanggal_pelayanan,
+    unit,
     waktu, 
     tinggi_badan_cm,
     berat_badan_kg,
     bmi,
-    sistolik, diastolik,
+    sistolik, 
+    diastolik,
     heart_rate,
     respirasi,
     suhu,
@@ -1062,10 +1066,11 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
   } = req.body;
   
   const emrStr = String(emr_no).trim();
-  if (!emrStr) {
+  
+  if (!emrStr || !nama_pasien) {
     return res.status(400).json({ 
       success: false, 
-      error: 'EMR tidak boleh kosong' 
+      error: 'EMR dan Nama Pasien harus diisi' 
     });
   }
   
@@ -1073,21 +1078,60 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
   try {
     conn = await pool.getConnection();
     
-    // Verifikasi pasien exists
-    const [pasienCheck] = await conn.query(
+    // ✅ STEP 1: Cek apakah pasien sudah ada
+    const [existingPatient] = await conn.query(
       'SELECT emr_no FROM pasien WHERE emr_no = ?',
       [emrStr]
     );
     
-    if (pasienCheck.length === 0) {
-      conn.release();
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Pasien dengan EMR ' + emrStr + ' tidak ditemukan' 
-      });
+    let patientRegistered = existingPatient.length > 0;
+    
+    // ✅ STEP 2: Jika belum ada, daftarkan pasien otomatis
+    if (!patientRegistered) {
+      console.log(`➕ Auto-registering patient: ${nama_pasien} (${emrStr})`);
+      
+      try {
+        await conn.query(`
+          INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat)
+          VALUES (?, ?, NULL, 'L', 'MCU', '')
+        `, [emrStr, nama_pasien]);
+        
+        console.log(`✓ Patient auto-registered: ${nama_pasien}`);
+        patientRegistered = true;
+        
+      } catch (regErr) {
+        if (regErr.code === 'ER_DUP_ENTRY') {
+          console.log('⚠️ Patient already exists (race condition), continuing...');
+          patientRegistered = true;
+        } else {
+          throw regErr;
+        }
+      }
     }
     
-    // ✅ INSERT dengan pelayanan_id
+    // ✅ STEP 3: Simpan data pelayanan RSI jika ada
+    if (pelayanan_id && patientRegistered) {
+      try {
+        const [existingPelayanan] = await conn.query(
+          'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
+          [pelayanan_id]
+        );
+        
+        if (existingPelayanan.length === 0) {
+          await conn.query(`
+            INSERT INTO pelayanan_rsi (
+              pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [pelayanan_id, emrStr, nama_pasien, tanggal_pelayanan, unit]);
+          
+          console.log(`✓ Pelayanan data saved: ID ${pelayanan_id}`);
+        }
+      } catch (pelayananErr) {
+        console.warn('⚠️ Could not save pelayanan data:', pelayananErr.message);
+      }
+    }
+    
+    // ✅ STEP 4: Simpan data MCU
     const [result] = await conn.query(`
       INSERT INTO vitals (
         emr_no,
@@ -1108,7 +1152,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       emrStr,
-      pelayanan_id ? parseInt(pelayanan_id) : null,  // ← TAMBAH INI
+      pelayanan_id ? parseInt(pelayanan_id) : null,
       waktu || new Date(),
       tinggi_badan_cm ? parseInt(tinggi_badan_cm) : null,
       berat_badan_kg ? parseFloat(berat_badan_kg) : null,
@@ -1126,13 +1170,17 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     
     conn.release();
     
-    console.log(`✓ MCU data saved: ID ${result.insertId}, EMR ${emrStr}, Pelayanan ${pelayanan_id || 'N/A'}`);
+    console.log(`✓ MCU saved: ID ${result.insertId}, EMR ${emrStr}${pelayanan_id ? `, Pelayanan ${pelayanan_id}` : ''}`);
     
     res.json({ 
       success: true, 
       id: result.insertId,
-      message: 'Data MCU berhasil disimpan'
+      patient_was_new: !existingPatient.length,
+      message: existingPatient.length 
+        ? 'Data MCU berhasil disimpan'
+        : 'Pasien berhasil didaftarkan dan data MCU tersimpan'
     });
+    
   } catch (err) {
     if (conn) conn.release();
     console.error('❌ MCU save error:', err.message);
@@ -1143,7 +1191,6 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     });
   }
 });
-
 // GET /api/mcu/patients - Dapatkan daftar pasien yang memiliki data MCU
 app.get('/api/mcu/patients', requireLogin, async (req, res) => {
   let conn;
@@ -1931,68 +1978,49 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
     
     console.log('✓ RSI API Response:', response.data);
     
-    if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-      const data = response.data[0];
+    // ✅ Parse response dari RSI API
+    if (response.data && response.data.metadata && response.data.metadata.status) {
+      const responseData = response.data.response;
       
-      if (!data.no_rm || !data.pasien || !data.pelayanan_id) {
-        return res.status(400).json({
+      if (Array.isArray(responseData) && responseData.length > 0) {
+        const data = responseData[0];
+        
+        // ✅ Cek apakah pasien sudah ada di database
+        let conn = await pool.getConnection();
+        const [existingPatient] = await conn.query(
+          'SELECT * FROM pasien WHERE emr_no = ?',
+          [data.no_rm]
+        );
+        conn.release();
+        
+        const patientExists = existingPatient.length > 0;
+        
+        res.json({
+          success: true,
+          data: {
+            pelayanan_id: data.pelayanan_id,
+            no_rm: data.no_rm,
+            pasien: data.pasien,
+            tgl: data.tgl,
+            unit: data.unit
+          },
+          patient_exists: patientExists,
+          patient_info: patientExists ? existingPatient[0] : null,
+          message: patientExists 
+            ? 'Pasien sudah terdaftar, data siap untuk MCU' 
+            : 'Pasien belum terdaftar, akan otomatis didaftarkan saat simpan MCU'
+        });
+        
+      } else {
+        res.status(404).json({
           success: false,
-          error: 'Data tidak lengkap dari RSI API'
+          error: 'Data pelayanan tidak ditemukan'
         });
       }
-      
-      let conn = await pool.getConnection();
-      
-      const [existingPatient] = await conn.query(
-        'SELECT * FROM pasien WHERE emr_no = ?',
-        [data.no_rm]
-      );
-      
-      const patientExists = existingPatient.length > 0;
-      
-      if (patientExists) {
-        try {
-          const [existingPelayanan] = await conn.query(
-            'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
-            [data.pelayanan_id]
-          );
-          
-          if (existingPelayanan.length === 0) {
-            await conn.query(`
-              INSERT INTO pelayanan_rsi (
-                pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit
-              ) VALUES (?, ?, ?, ?, ?)
-            `, [data.pelayanan_id, data.no_rm, data.pasien, data.tgl, data.unit]);
-            
-            console.log(`✓ Pelayanan data saved: ID ${data.pelayanan_id}`);
-          }
-        } catch (dbErr) {
-          console.error('❌ Database error saving pelayanan:', dbErr);
-        }
-      }
-      
-      conn.release();
-      
-      res.json({
-        success: true,
-        data: {
-          pelayanan_id: data.pelayanan_id,
-          no_rm: data.no_rm,
-          pasien: data.pasien,
-          tgl: data.tgl,
-          unit: data.unit
-        },
-        patient_exists: patientExists,
-        patient_info: patientExists ? existingPatient[0] : null,
-        message: patientExists 
-          ? 'Data pelayanan berhasil dimuat' 
-          : 'Pasien belum terdaftar, silakan daftar terlebih dahulu'
-      });
-      
     } else {
       res.status(404).json({
         success: false,
-        error: 'Data pelayanan tidak ditemukan'
+        error: 'Response tidak valid dari RSI API'
       });
     }
   } catch (err) {
@@ -2016,6 +2044,157 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
     }
   }
 });
+
+app.post('/api/mcu/save-with-registration', requireLogin, async (req, res) => {
+  const { 
+    pelayanan_id,
+    emr_no, 
+    nama_pasien,
+    tanggal_pelayanan,
+    unit,
+    waktu, 
+    tinggi_badan_cm,
+    berat_badan_kg,
+    bmi,
+    sistolik, 
+    diastolik,
+    heart_rate,
+    respirasi,
+    suhu,
+    spo2,
+    glukosa,
+    asam_urat,
+    kolesterol
+  } = req.body;
+  
+  const emrStr = String(emr_no).trim();
+  
+  if (!emrStr || !nama_pasien) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'EMR dan Nama Pasien harus diisi' 
+    });
+  }
+  
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    // ✅ STEP 1: Cek apakah pasien sudah ada
+    const [existingPatient] = await conn.query(
+      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      [emrStr]
+    );
+    
+    let patientRegistered = existingPatient.length > 0;
+    
+    // ✅ STEP 2: Jika belum ada, daftarkan pasien dulu
+    if (!patientRegistered) {
+      console.log(`➕ Auto-registering patient: ${nama_pasien} (${emrStr})`);
+      
+      try {
+        await conn.query(`
+          INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat)
+          VALUES (?, ?, NULL, 'L', 'MCU', '')
+        `, [emrStr, nama_pasien]);
+        
+        console.log(`✓ Patient auto-registered: ${nama_pasien}`);
+        patientRegistered = true;
+        
+      } catch (regErr) {
+        if (regErr.code === 'ER_DUP_ENTRY') {
+          console.log('⚠️ Patient already exists (race condition), continuing...');
+          patientRegistered = true;
+        } else {
+          throw regErr;
+        }
+      }
+    }
+    
+    // ✅ STEP 3: Simpan data pelayanan RSI jika ada
+    if (pelayanan_id && patientRegistered) {
+      try {
+        const [existingPelayanan] = await conn.query(
+          'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
+          [pelayanan_id]
+        );
+        
+        if (existingPelayanan.length === 0) {
+          await conn.query(`
+            INSERT INTO pelayanan_rsi (
+              pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [pelayanan_id, emrStr, nama_pasien, tanggal_pelayanan, unit]);
+          
+          console.log(`✓ Pelayanan data saved: ID ${pelayanan_id}`);
+        }
+      } catch (pelayananErr) {
+        console.warn('⚠️ Could not save pelayanan data:', pelayananErr.message);
+        // Continue anyway, pelayanan is optional
+      }
+    }
+    
+    // ✅ STEP 4: Simpan data MCU
+    const [result] = await conn.query(`
+      INSERT INTO vitals (
+        emr_no,
+        pelayanan_id,
+        waktu,
+        tinggi_badan_cm,
+        berat_badan_kg,
+        bmi,
+        sistolik,
+        diastolik,
+        heart_rate,
+        respirasi,
+        suhu,
+        spo2,
+        glukosa,
+        asam_urat,
+        kolesterol
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      emrStr,
+      pelayanan_id ? parseInt(pelayanan_id) : null,
+      waktu || new Date(),
+      tinggi_badan_cm ? parseInt(tinggi_badan_cm) : null,
+      berat_badan_kg ? parseFloat(berat_badan_kg) : null,
+      bmi ? parseFloat(bmi) : null,
+      sistolik ? parseInt(sistolik) : null,
+      diastolik ? parseInt(diastolik) : null,
+      heart_rate ? parseInt(heart_rate) : null,
+      respirasi ? parseInt(respirasi) : null,
+      suhu ? parseFloat(suhu) : null,
+      spo2 ? parseInt(spo2) : null,
+      glukosa ? parseInt(glukosa) : null,
+      asam_urat ? parseFloat(asam_urat) : null,
+      kolesterol ? parseInt(kolesterol) : null
+    ]);
+    
+    conn.release();
+    
+    console.log(`✓ MCU data saved: ID ${result.insertId}, EMR ${emrStr}${pelayanan_id ? `, Pelayanan ${pelayanan_id}` : ''}`);
+    
+    res.json({ 
+      success: true, 
+      id: result.insertId,
+      patient_registered: !existingPatient.length,
+      message: existingPatient.length 
+        ? 'Data MCU berhasil disimpan'
+        : 'Pasien berhasil didaftarkan dan data MCU tersimpan'
+    });
+    
+  } catch (err) {
+    if (conn) conn.release();
+    console.error('❌ MCU save error:', err.message);
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Database error: ' + err.message 
+    });
+  }
+});
+
 
 app.post('/api/rsi/save-pelayanan-after-registration', requireLogin, async (req, res) => {
   const { pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit } = req.body;
