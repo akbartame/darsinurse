@@ -1326,15 +1326,18 @@ app.get('/api/mcu/by-patient/:emr', requireLogin, async (req, res) => {
 });
 
 // ============================================
-// ✅ PUBLIC API - GET MCU DATA ONLY (BY ID LAYANAN)
+// ✅ PUBLIC API - GET MCU DATA ONLY (BY PELAYANAN ID)
 // ============================================
 app.post('/api/external/get-mcu-data', async (req, res) => {
-  const { id_layanan } = req.body;
+  const { no_layanan, pelayanan_id } = req.body;
   
-  if (!id_layanan) {
+  // Accept both parameter names
+  const searchId = no_layanan || pelayanan_id;
+  
+  if (!searchId) {
     return res.status(400).json({
       success: false,
-      error: 'ID Layanan (nomor kunjungan) harus diisi',
+      error: 'no_layanan atau pelayanan_id harus diisi',
       timestamp: new Date().toISOString()
     });
   }
@@ -1343,12 +1346,12 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
   try {
     conn = await pool.getConnection();
     
-    // ✅ Query: Ambil data MCU dari table vitals berdasarkan id_kunjungan
+    // ✅ Query: Ambil data MCU dari table vitals berdasarkan pelayanan_id
     const [mcuResults] = await conn.query(`
       SELECT 
         v.id,
         v.emr_no,
-        v.id_kunjungan,
+        v.pelayanan_id,
         v.waktu,
         v.heart_rate,
         v.sistolik,
@@ -1368,18 +1371,18 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
         p.poli
       FROM vitals v
       LEFT JOIN pasien p ON v.emr_no = p.emr_no
-      WHERE v.id_kunjungan = ?
+      WHERE v.pelayanan_id = ? OR CAST(v.pelayanan_id AS CHAR) = ?
       ORDER BY v.waktu DESC
       LIMIT 1
-    `, [parseInt(id_layanan)]);
+    `, [parseInt(searchId) || 0, String(searchId)]);
     
     conn.release();
     
     if (mcuResults.length === 0) {
       return res.status(404).json({
         success: false,
-        error: 'Data MCU tidak ditemukan untuk ID Layanan: ' + id_layanan,
-        id_layanan: id_layanan,
+        error: 'Data MCU tidak ditemukan untuk pelayanan ID: ' + searchId,
+        pelayanan_id: searchId,
         timestamp: new Date().toISOString()
       });
     }
@@ -1395,8 +1398,7 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
       timestamp: new Date().toISOString(),
       data: {
         id_vital: mcu.id,
-        id_layanan: mcu.id_kunjungan,
-        id_kunjungan: mcu.id_kunjungan,
+        pelayanan_id: mcu.pelayanan_id,
         
         // Data Pasien
         pasien: {
