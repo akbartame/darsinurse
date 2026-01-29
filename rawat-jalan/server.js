@@ -383,11 +383,103 @@ async function fixVitalsDataTypes() {
 }
 
 
+async function migratePelayananRSI() {
+  const conn = await pool.getConnection();
+  
+  try {
+    console.log('🔧 Checking pelayanan_rsi table...');
+    
+    // ✅ 1. Check if table already exists
+    const [tables] = await conn.query(`
+      SELECT TABLE_NAME 
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'pelayanan_rsi'
+    `);
+    
+    if (tables.length === 0) {
+      console.log('➕ Creating pelayanan_rsi table...');
+      
+      // ✅ 2. Create table with foreign key
+      await conn.query(`
+        CREATE TABLE pelayanan_rsi (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          
+          pelayanan_id INT NOT NULL,
+          emr_no VARCHAR(11) NOT NULL,
+          nama_pasien VARCHAR(100),
+          tanggal_pelayanan DATE,
+          unit VARCHAR(50),
+          
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          
+          CONSTRAINT pelayanan_rsi_ibfk_1 
+            FOREIGN KEY (emr_no) 
+            REFERENCES pasien(emr_no) 
+            ON DELETE CASCADE
+            ON UPDATE CASCADE,
+          
+          INDEX idx_pelayanan_id (pelayanan_id),
+          INDEX idx_emr_no (emr_no),
+          INDEX idx_tanggal (tanggal_pelayanan),
+          
+          UNIQUE KEY unique_pelayanan_id (pelayanan_id)
+          
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      
+      console.log('✓ pelayanan_rsi table created successfully');
+      
+    } else {
+      console.log('✓ pelayanan_rsi table already exists');
+      
+      // ✅ 3. Optional: Verify foreign key exists
+      const [fks] = await conn.query(`
+        SELECT CONSTRAINT_NAME
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'pelayanan_rsi'
+        AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+        AND CONSTRAINT_NAME = 'pelayanan_rsi_ibfk_1'
+      `);
+      
+      if (fks.length === 0) {
+        console.log('⚠️ Foreign key constraint missing, adding...');
+        
+        try {
+          await conn.query(`
+            ALTER TABLE pelayanan_rsi
+            ADD CONSTRAINT pelayanan_rsi_ibfk_1 
+            FOREIGN KEY (emr_no) 
+            REFERENCES pasien(emr_no) 
+            ON DELETE CASCADE
+            ON UPDATE CASCADE
+          `);
+          console.log('✓ Foreign key constraint added');
+        } catch (err) {
+          console.warn('⚠️ Could not add foreign key:', err.message);
+        }
+      } else {
+        console.log('✓ Foreign key constraint exists');
+      }
+    }
+    
+  } catch (err) {
+    console.error('❌ Migration pelayanan_rsi error:', err);
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+
 // Panggil setelah initDatabase()
 initDatabase()
   .then(() => migrateAddEmrDokter())  
   .then(() => optimizeDatabase())
   .then(() => fixVitalsDataTypes())
+  .then(() => migratePelayananRSI()) 
   .catch(err => {
     console.error('Failed to initialize:', err);
     process.exit(1);
@@ -1851,6 +1943,7 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
   try {
     console.log(`🔍 Fetching pelayanan data for ID: ${id_pelayanan}`);
     
+    // ✅ STEP 1: Fetch dari RSI API
     const response = await axios.post(
       'https://api.rsisurabaya.com:8008/registration/get-pelayanan-by-id',
       { id_pelayanan: parseInt(id_pelayanan) },
@@ -1865,84 +1958,106 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
     
     console.log('✓ RSI API Response:', response.data);
     
-    if (response.data && response.data.metadata && response.data.metadata.status) {
-      const pelayananData = response.data.response;
+    // ✅ STEP 2: Validasi response
+    if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+      const data = response.data[0];
       
-      if (pelayananData && pelayananData.length > 0) {
-        const data = pelayananData[0];
-        
-        let conn = await pool.getConnection();
-        
-        // ✅ 1. CEK APAKAH PASIEN SUDAH ADA
-        const [existingPatient] = await conn.query(
-          'SELECT * FROM pasien WHERE emr_no = ?',
-          [data.no_rm]
-        );
-        
-        // ✅ 2. SIMPAN/UPDATE DATA PELAYANAN RSI
-        const [existingPelayanan] = await conn.query(
-          'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
-          [data.pelayanan_id]
-        );
-        
-        if (existingPelayanan.length === 0) {
-          // Insert data pelayanan baru
-          await conn.query(`
-            INSERT INTO pelayanan_rsi (
-              pelayanan_id,
-              emr_no,
-              nama_pasien,
-              tanggal_pelayanan,
-              unit
-            ) VALUES (?, ?, ?, ?, ?)
-          `, [
-            data.pelayanan_id,
-            data.no_rm,
-            data.pasien,
-            data.tgl,
-            data.unit
-          ]);
-          
-          console.log(`✓ Pelayanan data saved: ID ${data.pelayanan_id}`);
-        } else {
-          // Update jika sudah ada
-          await conn.query(`
-            UPDATE pelayanan_rsi 
-            SET 
-              nama_pasien = ?,
-              tanggal_pelayanan = ?,
-              unit = ?,
-              updated_at = NOW()
-            WHERE pelayanan_id = ?
-          `, [
-            data.pasien,
-            data.tgl,
-            data.unit,
-            data.pelayanan_id
-          ]);
-          
-          console.log(`✓ Pelayanan data updated: ID ${data.pelayanan_id}`);
-        }
-        
-        conn.release();
-        
-        res.json({
-          success: true,
-          data: data,
-          patient_exists: existingPatient.length > 0,
-          patient_info: existingPatient.length > 0 ? existingPatient[0] : null,
-          pelayanan_saved: true
-        });
-      } else {
-        res.status(404).json({
+      // Validasi data yang diperlukan
+      if (!data.no_rm || !data.pasien || !data.pelayanan_id) {
+        return res.status(400).json({
           success: false,
-          error: 'Data pelayanan tidak ditemukan'
+          error: 'Data tidak lengkap dari RSI API'
         });
       }
+      
+      let conn = await pool.getConnection();
+      
+      // ✅ STEP 3: CEK apakah pasien sudah terdaftar
+      const [existingPatient] = await conn.query(
+        'SELECT * FROM pasien WHERE emr_no = ?',
+        [data.no_rm]
+      );
+      
+      const patientExists = existingPatient.length > 0;
+      
+      // ✅ STEP 4a: Jika pasien SUDAH terdaftar → Simpan ke pelayanan_rsi
+      if (patientExists) {
+        try {
+          // Cek apakah pelayanan_id sudah pernah disimpan
+          const [existingPelayanan] = await conn.query(
+            'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
+            [data.pelayanan_id]
+          );
+          
+          if (existingPelayanan.length === 0) {
+            // Insert data pelayanan baru
+            await conn.query(`
+              INSERT INTO pelayanan_rsi (
+                pelayanan_id,
+                emr_no,
+                nama_pasien,
+                tanggal_pelayanan,
+                unit
+              ) VALUES (?, ?, ?, ?, ?)
+            `, [
+              data.pelayanan_id,
+              data.no_rm,
+              data.pasien,
+              data.tgl,
+              data.unit
+            ]);
+            
+            console.log(`✓ Pelayanan data saved: ID ${data.pelayanan_id}`);
+          } else {
+            // Update jika sudah ada
+            await conn.query(`
+              UPDATE pelayanan_rsi 
+              SET 
+                nama_pasien = ?,
+                tanggal_pelayanan = ?,
+                unit = ?,
+                updated_at = NOW()
+              WHERE pelayanan_id = ?
+            `, [
+              data.pasien,
+              data.tgl,
+              data.unit,
+              data.pelayanan_id
+            ]);
+            
+            console.log(`✓ Pelayanan data updated: ID ${data.pelayanan_id}`);
+          }
+        } catch (dbErr) {
+          console.error('❌ Database error saving pelayanan:', dbErr);
+          // Lanjutkan proses meskipun gagal simpan pelayanan
+        }
+      }
+      // ✅ STEP 4b: Jika pasien BELUM terdaftar → JANGAN simpan pelayanan_rsi
+      // (akan disimpan setelah pasien berhasil didaftarkan)
+      
+      conn.release();
+      
+      // ✅ STEP 5: Return data ke frontend
+      res.json({
+        success: true,
+        data: {
+          pelayanan_id: data.pelayanan_id,
+          no_rm: data.no_rm,
+          pasien: data.pasien,
+          tgl: data.tgl,
+          unit: data.unit
+        },
+        patient_exists: patientExists,
+        patient_info: patientExists ? existingPatient[0] : null,
+        message: patientExists 
+          ? 'Data pelayanan berhasil dimuat' 
+          : 'Pasien belum terdaftar, silakan daftar terlebih dahulu'
+      });
+      
     } else {
       res.status(404).json({
         success: false,
-        error: response.data?.metadata?.message || 'Data tidak ditemukan'
+        error: 'Data pelayanan tidak ditemukan'
       });
     }
   } catch (err) {
@@ -1964,6 +2079,97 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
         error: 'Gagal mengambil data dari RSI API: ' + err.message
       });
     }
+  }
+});
+
+// ✅ TAMBAHAN: API untuk menyimpan pelayanan SETELAH pasien terdaftar
+app.post('/api/rsi/save-pelayanan-after-registration', requireLogin, async (req, res) => {
+  const { pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit } = req.body;
+  
+  if (!pelayanan_id || !emr_no) {
+    return res.status(400).json({
+      success: false,
+      error: 'pelayanan_id dan emr_no harus diisi'
+    });
+  }
+  
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    // Verifikasi pasien exists
+    const [pasienCheck] = await conn.query(
+      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      [emr_no]
+    );
+    
+    if (pasienCheck.length === 0) {
+      conn.release();
+      return res.status(404).json({
+        success: false,
+        error: 'Pasien tidak ditemukan'
+      });
+    }
+    
+    // Cek apakah pelayanan sudah ada
+    const [existingPelayanan] = await conn.query(
+      'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
+      [pelayanan_id]
+    );
+    
+    if (existingPelayanan.length === 0) {
+      // Insert baru
+      await conn.query(`
+        INSERT INTO pelayanan_rsi (
+          pelayanan_id,
+          emr_no,
+          nama_pasien,
+          tanggal_pelayanan,
+          unit
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        pelayanan_id,
+        emr_no,
+        nama_pasien,
+        tanggal_pelayanan,
+        unit
+      ]);
+      
+      console.log(`✓ Pelayanan data saved after registration: ID ${pelayanan_id}`);
+    } else {
+      // Update
+      await conn.query(`
+        UPDATE pelayanan_rsi 
+        SET 
+          nama_pasien = ?,
+          tanggal_pelayanan = ?,
+          unit = ?,
+          updated_at = NOW()
+        WHERE pelayanan_id = ?
+      `, [
+        nama_pasien,
+        tanggal_pelayanan,
+        unit,
+        pelayanan_id
+      ]);
+      
+      console.log(`✓ Pelayanan data updated after registration: ID ${pelayanan_id}`);
+    }
+    
+    conn.release();
+    
+    res.json({
+      success: true,
+      message: 'Data pelayanan berhasil disimpan'
+    });
+    
+  } catch (err) {
+    if (conn) conn.release();
+    console.error('❌ Save pelayanan error:', err);
+    res.status(500).json({
+      success: false,
+      error: 'Database error: ' + err.message
+    });
   }
 });
 
