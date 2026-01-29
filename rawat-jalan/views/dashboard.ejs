@@ -2997,15 +2997,17 @@ document.getElementById('print-mcu-emr')?.addEventListener('change', async funct
       result.data.forEach(mcu => {
         const option = document.createElement('option');
         option.value = mcu.id;
-        
+
         const date = new Date(mcu.waktu);
         const dateStr = date.toLocaleDateString('id-ID', {
           day: 'numeric',
           month: 'short',
           year: 'numeric'
         });
-        
-        option.textContent = `MCU ${dateStr} - BMI: ${mcu.bmi || '-'} | Glukosa: ${mcu.glukosa || '-'}`;
+        const timeStr = date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+        // Tampilkan tanggal + waktu (ganti BMI/Glukosa dengan Waktu)
+        option.textContent = `MCU ${dateStr} ${timeStr}`;
         dataSelect.appendChild(option);
       });
       
