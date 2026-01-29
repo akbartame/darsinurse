@@ -1321,7 +1321,7 @@
                     <input type="number" 
                           class="form-control" 
                           id="mcu-height" 
-                          placeholder="170" 
+                          placeholder="Contoh: 170" 
                           required>
                   </div>
 
@@ -1332,7 +1332,7 @@
                             step="0.1" 
                             class="form-control" 
                             id="mcu-weight" 
-                            placeholder="65">
+                            placeholder="Contoh: 65">
                       <button type="button" 
                               class="btn btn-sm btn-primary" 
                               id="btn-scan-mcu-weight">
@@ -1343,7 +1343,7 @@
                   </div>
 
                   <div class="col-md-4 mb-3">
-                    <label class="form-label">BMI (kg/m²)</label>
+                    <label class="form-label">IMT</label>
                     <input type="text" 
                           class="form-control" 
                           id="mcu-bmi" 
@@ -1370,7 +1370,7 @@
                       <input type="number" 
                             class="form-control" 
                             id="mcu-sistolik" 
-                            placeholder="120"
+                            placeholder="Contoh: 120"
                             required>
                       <button type="button" 
                               class="btn btn-sm btn-primary" 
@@ -1385,7 +1385,7 @@
                     <input type="number" 
                           class="form-control" 
                           id="mcu-diastolik" 
-                          placeholder="80"
+                          placeholder="Contoh: 80"
                           required>
                     <small id="mcu-bp-status" class="text-muted"></small>
                   </div>
@@ -1397,7 +1397,7 @@
                       <input type="number" 
                             class="form-control" 
                             id="mcu-heart-rate" 
-                            placeholder="75"
+                            placeholder="Contoh: 75"
                             required>
                       <button type="button" 
                               class="btn btn-sm btn-primary" 
@@ -1405,7 +1405,7 @@
                         <i class="fa-brands fa-bluetooth"></i>
                       </button>
                     </div>
-                    <small id="mcu-hr-status" class="text-muted"></small>
+                    <small id="mcu-hr-status" class="text-muted">Siap menerima data - lakukan pengukuran</small>
                   </div>
 
                   <!-- Respirasi -->
@@ -1415,16 +1415,10 @@
                       <input type="number" 
                             class="form-control" 
                             id="mcu-respirasi" 
-                            placeholder="18" 
+                            placeholder="Contoh: 18" 
                             required>
-                      <button type="button" 
-                              class="btn btn-sm btn-primary" 
-                              id="btn-scan-mcu-rr"
-                              title="Scan Respiratory Rate via Bluetooth">
-                        <i class="fa-brands fa-bluetooth"></i>
-                      </button>
                     </div>
-                    <small id="mcu-rr-status" class="text-muted">Klik tombol Bluetooth untuk mengukur</small>
+                    <small id="mcu-rr-status" class="text-muted">Terukur otomatis dari Heart Rate Monitor</small>
                   </div>
 
                   <!-- Suhu -->
@@ -1434,7 +1428,7 @@
                           step="0.1" 
                           class="form-control" 
                           id="mcu-suhu" 
-                          placeholder="36.5" 
+                          placeholder="Contoh: 36.5" 
                           required>
                   </div>
 
@@ -1444,7 +1438,7 @@
                     <input type="number" 
                           class="form-control" 
                           id="mcu-spo2" 
-                          placeholder="98" 
+                          placeholder="Contoh: 98" 
                           min="0" 
                           max="100" 
                           required>
@@ -1466,7 +1460,7 @@
                     <input type="number" 
                           class="form-control" 
                           id="mcu-glucose" 
-                          placeholder="95"
+                          placeholder="Contoh: 95"
                           required>
                     <small id="mcu-glucose-status" class="text-muted"></small>
                   </div>
@@ -1477,7 +1471,7 @@
                           step="0.1" 
                           class="form-control" 
                           id="mcu-asam-urat" 
-                          placeholder="5.5" 
+                          placeholder="Contoh: 5.5" 
                           required>
                   </div>
 
@@ -1486,7 +1480,7 @@
                     <input type="number" 
                           class="form-control" 
                           id="mcu-cholesterol" 
-                          placeholder="200" 
+                          placeholder="Contoh: 200" 
                           required>
                   </div>
                 </div>
@@ -2699,9 +2693,6 @@ document.addEventListener('DOMContentLoaded', function() {
   // ============ MCU BLUETOOTH SCAN BUTTONS ============
   document.getElementById('btn-scan-mcu-hr')?.addEventListener('click', () => {
     scanMCUBLE('hr', HEART_RATE_SERVICE, HR_MEASUREMENT_CHAR, handleMCUHeartRate);
-  });
-  document.getElementById('btn-scan-mcu-rr')?.addEventListener('click', () => {
-    scanMCUBLE('rr', RESPIRATORY_RATE_SERVICE, RR_MEASUREMENT_CHAR, handleMCURespiratoryRate);
   });
 
   document.getElementById('btn-scan-mcu-glucose')?.addEventListener('click', () => {

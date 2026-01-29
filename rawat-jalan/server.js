@@ -1597,8 +1597,8 @@ app.post('/api/external/get-layanan', async (req, res) => {
 // ✅ PUBLIC API - GET MCU DATA ONLY (BY PELAYANAN ID)
 // ============================================
 app.post('/api/external/get-mcu-data', async (req, res) => {
-  const { no_layanan, pelayanan_id } = req.body;
-  const searchId = no_layanan || pelayanan_id;
+  const { no_layanan, id_pelayanan } = req.body;
+  const searchId = no_layanan || id_pelayanan;
   
   if (!searchId) {
     return res.status(400).json({
