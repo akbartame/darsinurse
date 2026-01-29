@@ -1766,19 +1766,9 @@ function generateMCUHTML(data) {
           <td>${data.emr_no || '-'}</td>
         </tr>
         <tr>
-          <td>Tanggal Lahir</td>
-          <td>:</td>
-          <td>${formatDateShort(data.tanggal_lahir)} (${age} tahun)</td>
-        </tr>
-        <tr>
           <td>Jenis Kelamin</td>
           <td>:</td>
           <td>${gender}</td>
-        </tr>
-        <tr>
-          <td>Alamat</td>
-          <td>:</td>
-          <td>${data.alamat || '-'}</td>
         </tr>
         <tr>
           <td>Tanggal Pemeriksaan</td>
