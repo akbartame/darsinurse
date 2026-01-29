@@ -1538,14 +1538,11 @@ app.post('/api/external/get-layanan', async (req, res) => {
     
     const mcu = mcuResults.length > 0 ? mcuResults[0] : null;
     
-    // ✅ Format response
+    // ✅ Format response (simplified)
     res.json({
       success: true,
-      timestamp: new Date().toISOString(),
       data: {
-        // Data dari pelayanan_rsi
         pelayanan: {
-          id: pelayanan.id,
           pelayanan_id: pelayanan.pelayanan_id,
           emr_no: pelayanan.emr_no,
           nama_pasien: pelayanan.nama_pasien,
@@ -1553,20 +1550,14 @@ app.post('/api/external/get-layanan', async (req, res) => {
           unit: pelayanan.unit
         },
         
-        // Data pasien (dari tabel pasien)
         pasien: {
-          emr_no: pelayanan.emr_no,
           nama: patientData?.nama || pelayanan.nama_pasien || '-',
-          tanggal_lahir: patientData?.tanggal_lahir || null,
-          umur: age,
           jenis_kelamin: patientData?.jenis_kelamin || '-',
-          poli: patientData?.poli || '-',
-          alamat: patientData?.alamat || '-'
+          umur: age,
+          poli: patientData?.poli || '-'
         },
         
-        // Data MCU (dari tabel vitals) - jika ada
         mcu: mcu ? {
-          id_vital: mcu.id,
           waktu_pemeriksaan: mcu.waktu,
           
           antropometri: {
