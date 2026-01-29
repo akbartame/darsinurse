@@ -2233,7 +2233,7 @@ app.post('/api/patients/register', requireLogin, async (req, res) => {
     
     conn.release();
     
-    console.log(`✓ Patient registered: EMR ${emrStr}, Name: ${nama}`);
+    console.log(`✓ Patient registered: EMR ${emrNo}, Name: ${nama}`);
     
     res.json({ 
       success: true, 
