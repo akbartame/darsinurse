@@ -1346,39 +1346,21 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
   try {
     conn = await pool.getConnection();
     
-    // ✅ Query: Ambil data MCU dari table vitals berdasarkan pelayanan_id
+    console.log(`🔍 Searching MCU data for pelayanan_id: ${searchId}`);
+    
+    // ✅ Query: Ambil data MCU dari table vitals berdasarkan pelayanan_id (SIMPLE VERSION)
     const [mcuResults] = await conn.query(`
-      SELECT 
-        v.id,
-        v.emr_no,
-        v.pelayanan_id,
-        v.waktu,
-        v.heart_rate,
-        v.sistolik,
-        v.diastolik,
-        v.respirasi,
-        v.glukosa,
-        v.berat_badan_kg,
-        v.tinggi_badan_cm,
-        v.bmi,
-        v.suhu,
-        v.spo2,
-        v.asam_urat,
-        v.kolesterol,
-        p.nama AS nama_pasien,
-        p.tanggal_lahir,
-        p.jenis_kelamin,
-        p.poli
-      FROM vitals v
-      LEFT JOIN pasien p ON v.emr_no = p.emr_no
-      WHERE v.pelayanan_id = ? OR CAST(v.pelayanan_id AS CHAR) = ?
-      ORDER BY v.waktu DESC
+      SELECT *
+      FROM vitals
+      WHERE pelayanan_id = ? OR CAST(pelayanan_id AS CHAR) = ?
+      ORDER BY waktu DESC
       LIMIT 1
     `, [parseInt(searchId) || 0, String(searchId)]);
     
-    conn.release();
+    console.log(`📊 Query result count: ${mcuResults.length}`);
     
     if (mcuResults.length === 0) {
+      conn.release();
       return res.status(404).json({
         success: false,
         error: 'Data MCU tidak ditemukan untuk pelayanan ID: ' + searchId,
@@ -1388,10 +1370,31 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
     }
     
     const mcu = mcuResults[0];
+    console.log(`✓ Found MCU record:`, mcu);
+    
+    // ✅ Ambil data pasien terpisah jika diperlukan
+    let patientData = null;
+    if (mcu.emr_no) {
+      const [patientResults] = await conn.query(`
+        SELECT nama, tanggal_lahir, jenis_kelamin, poli, alamat
+        FROM pasien
+        WHERE emr_no = ?
+        LIMIT 1
+      `, [mcu.emr_no]);
+      
+      if (patientResults.length > 0) {
+        patientData = patientResults[0];
+      }
+    }
+    
+    conn.release();
     
     // ✅ Hitung umur dari tanggal lahir
-    const birthDate = mcu.tanggal_lahir ? new Date(mcu.tanggal_lahir).getFullYear() : null;
-    const age = birthDate ? new Date().getFullYear() - birthDate : null;
+    let age = null;
+    if (patientData && patientData.tanggal_lahir) {
+      const birthDate = new Date(patientData.tanggal_lahir).getFullYear();
+      age = new Date().getFullYear() - birthDate;
+    }
     
     res.json({
       success: true,
@@ -1403,11 +1406,11 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
         // Data Pasien
         pasien: {
           emr_no: mcu.emr_no,
-          nama: mcu.nama_pasien,
-          tanggal_lahir: mcu.tanggal_lahir,
+          nama: patientData?.nama || '-',
+          tanggal_lahir: patientData?.tanggal_lahir || null,
           umur: age,
-          jenis_kelamin: mcu.jenis_kelamin,
-          poli: mcu.poli
+          jenis_kelamin: patientData?.jenis_kelamin || '-',
+          poli: patientData?.poli || '-'
         },
         
         // Data MCU - Antropometri
@@ -1440,7 +1443,7 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
     });
     
   } catch (err) {
-    console.error('❌ External API Error (MCU):', err.message);
+    console.error('❌ External API Error (MCU):', err);
     
     if (conn) conn.release();
     
