@@ -1256,7 +1256,7 @@ function generateMCUHTML(data) {
       position: relative;
     }
     
-    /* Header dengan Logo - IMPROVED */
+    /* Header dengan Logo */
     .header {
       margin-bottom: 20px;
     }
@@ -1314,7 +1314,7 @@ function generateMCUHTML(data) {
     .logo-placeholder-right {
       width: 95px;
       height: 95px;
-      visibility: hidden; /* For symmetry */
+      visibility: hidden;
     }
 
     .header-line {
@@ -1325,6 +1325,7 @@ function generateMCUHTML(data) {
     .header-line-thin {
       border-bottom: 1px solid #00695c;
     }    
+    
     /* Judul Dokumen */
     .document-title {
       text-align: center;
@@ -1437,53 +1438,11 @@ function generateMCUHTML(data) {
       font-size: 9pt;
     }
     
-    .results-table .normal-range {
-      text-align: center;
-      font-size: 9pt;
-      color: #555;
-    }
-    
     .results-table .category-header {
       background: #e0f2f1 !important;
       font-weight: bold;
       text-align: center;
       color: #00695c;
-      font-size: 10pt;
-    }
-    
-    /* Status Colors */
-    .status-normal {
-      color: #2e7d32;
-      font-weight: bold;
-    }
-    
-    .status-warning {
-      color: #f57c00;
-      font-weight: bold;
-    }
-    
-    .status-danger {
-      color: #c62828;
-      font-weight: bold;
-    }
-    
-    /* Kesimpulan */
-    .conclusion {
-      background: #e8f5e9;
-      padding: 12px;
-      border-left: 4px solid #4caf50;
-      margin: 15px 0;
-      border-radius: 4px;
-      text-align: justify;
-    }
-    
-    .conclusion h3 {
-      color: #2e7d32;
-      margin-bottom: 8px;
-      font-size: 11pt;
-    }
-    
-    .conclusion p {
       font-size: 10pt;
     }
     
@@ -1522,35 +1481,10 @@ function generateMCUHTML(data) {
       padding-top: 8px;
     }
     
-    /* Print Button */
-    .print-button {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      padding: 12px 25px;
-      background: #00695c;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      font-size: 13pt;
-      cursor: pointer;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-      z-index: 1000;
-      font-family: Arial, sans-serif;
-    }
-    
-    .print-button:hover {
-      background: #004d40;
-    }
-    
     /* Print Styles */
     @media print {
       body {
         padding: 0;
-      }
-      
-      .print-button {
-        display: none !important;
       }
       
       .container {
@@ -1577,12 +1511,8 @@ function generateMCUHTML(data) {
   </style>
 </head>
 <body>
-  <button class="print-button" onclick="window.print()">
-    🖨️ Cetak / Print
-  </button>
-  
   <div class="container">
-    <!-- Header with Logo Above Line -->
+    <!-- Header with Logo -->
     <div class="header">
       <div class="header-top">
         <!-- Logo Kiri -->
@@ -1590,20 +1520,18 @@ function generateMCUHTML(data) {
             alt="Logo RSI" 
             class="logo-rsi" 
             onerror="this.style.display='none'">
-        
         <!-- Info Tengah -->
         <div class="header-center">
-          <h1>Rumah Sakit Islam Surabaya</h1>
-          <div class="subtitle">Ahmad Yani Islamic Hospital</div>
+          <h1>RS Islam Surabaya A. Yani</h1>
+          <div class="subtitle">Kesembuhan datang dari Allah, keselamatan dan kepuasan pasien tanggung jawab kami</div>
           <div class="address">
-            Jl. Jemursari No.51-57, Surabaya 60237, Jawa Timur, Indonesia
+            Jl. Achmad Yani No.2-4, Wonokromo
           </div>
           <div class="contact">
-            Telp: (031) 8284505 | Fax: (031) 8284506 | Email: info@rsisurabaya.com | www.rsisurabaya.com
+            Telp: 031 – 8284505-07  | Fax: 031 – 8284486 | Email: rsiayani@yahoo.co.id | www.rsisurabaya.com
           </div>
-        </div>
-        
-        <!-- Placeholder kanan untuk simetri (bisa diisi logo akreditasi) -->
+        </div>        
+        <!-- Placeholder kanan untuk simetri -->
         <div class="logo-placeholder-right"></div>
       </div>
       
@@ -1611,6 +1539,7 @@ function generateMCUHTML(data) {
       <div class="header-line"></div>
       <div class="header-line-thin"></div>
     </div>
+    
     <!-- Judul Dokumen -->
     <div class="document-title">
       <h2>SURAT KETERANGAN MEDICAL CHECK UP</h2>
@@ -1671,95 +1600,83 @@ function generateMCUHTML(data) {
       <table class="results-table">
         <thead>
           <tr>
-            <th style="width: 38%;">Parameter Pemeriksaan</th>
-            <th style="width: 18%;">Hasil</th>
-            <th style="width: 14%;">Satuan</th>
-            <th style="width: 30%;">Nilai Normal</th>
+            <th style="width: 50%;">Parameter Pemeriksaan</th>
+            <th style="width: 25%;">Hasil</th>
+            <th style="width: 25%;">Satuan</th>
           </tr>
         </thead>
         <tbody>
-          <!-- Vital Signs -->
-          <tr>
-            <td colspan="4" class="category-header">PEMERIKSAAN VITAL SIGNS</td>
-          </tr>
-          <tr>
-            <td class="param-name">Heart Rate (Detak Jantung)</td>
-            <td class="result-value ${getStatusClass(data.heart_rate, 60, 100)}">${data.heart_rate || '-'}</td>
-            <td class="unit">bpm</td>
-            <td class="normal-range">60 - 100 bpm</td>
-          </tr>
-          <tr>
-            <td class="param-name">Respiratory Rate (Pernapasan)</td>
-            <td class="result-value ${getStatusClass(data.respirasi, 12, 20)}">${data.respirasi || '-'}</td>
-            <td class="unit">breaths/minutes</td>
-            <td class="normal-range">12 - 20 breaths/minutes</td>
-          </tr>
-          <tr>
-            <td class="param-name">Tekanan Darah Sistolik</td>
-            <td class="result-value ${getStatusClass(data.sistolik, 90, 120)}">${data.sistolik || '-'}</td>
-            <td class="unit">mmHg</td>
-            <td class="normal-range">90 - 120 mmHg</td>
-          </tr>
-          <tr>
-            <td class="param-name">Tekanan Darah Diastolik</td>
-            <td class="result-value ${getStatusClass(data.diastolik, 60, 80)}">${data.diastolik || '-'}</td>
-            <td class="unit">mmHg</td>
-            <td class="normal-range">60 - 80 mmHg</td>
-          </tr>
-          
           <!-- Antropometri -->
           <tr>
-            <td colspan="4" class="category-header">PEMERIKSAAN ANTROPOMETRI</td>
-          </tr>
-          <tr>
-            <td class="param-name">Berat Badan</td>
-            <td class="result-value">${data.berat_badan_kg || '-'}</td>
-            <td class="unit">kg</td>
-            <td class="normal-range">Sesuai tinggi badan</td>
+            <td colspan="3" class="category-header">PEMERIKSAAN ANTROPOMETRI</td>
           </tr>
           <tr>
             <td class="param-name">Tinggi Badan</td>
             <td class="result-value">${data.tinggi_badan_cm || '-'}</td>
             <td class="unit">cm</td>
-            <td class="normal-range">-</td>
           </tr>
           <tr>
-            <td class="param-name">Body Mass Index (BMI)</td>
-            <td class="result-value ${getBMIClass(data.bmi)}">${data.bmi || '-'}</td>
+            <td class="param-name">Berat Badan</td>
+            <td class="result-value">${data.berat_badan_kg || '-'}</td>
+            <td class="unit">kg</td>
+          </tr>
+          <tr>
+            <td class="param-name">Body Mass Index (BMI/IMT)</td>
+            <td class="result-value">${data.bmi || '-'}</td>
             <td class="unit">kg/m²</td>
-            <td class="normal-range">18.5 - 24.9${bmiStatus ? ` (${bmiStatus})` : ''}</td>
+          </tr>
+          
+          <!-- Vital Signs -->
+          <tr>
+            <td colspan="3" class="category-header">PEMERIKSAAN VITAL SIGNS</td>
+          </tr>
+          <tr>
+            <td class="param-name">Tekanan Darah (Tensi)</td>
+            <td class="result-value">${data.sistolik || '-'}/${data.diastolik || '-'}</td>
+            <td class="unit">mmHg</td>
+          </tr>
+          <tr>
+            <td class="param-name">Heart Rate (Detak Jantung)</td>
+            <td class="result-value">${data.heart_rate || '-'}</td>
+            <td class="unit">bpm</td>
+          </tr>
+          <tr>
+            <td class="param-name">Respiratory Rate (Pernapasan)</td>
+            <td class="result-value">${data.respirasi || '-'}</td>
+            <td class="unit">breaths/min</td>
+          </tr>
+          <tr>
+            <td class="param-name">Suhu Tubuh</td>
+            <td class="result-value">${data.suhu || '-'}</td>
+            <td class="unit">°C</td>
+          </tr>
+          <tr>
+            <td class="param-name">Saturasi Oksigen (SpO2)</td>
+            <td class="result-value">${data.spo2 || '-'}</td>
+            <td class="unit">%</td>
           </tr>
           
           <!-- Lab -->
           <tr>
-            <td colspan="4" class="category-header">PEMERIKSAAN LABORATORIUM</td>
+            <td colspan="3" class="category-header">PEMERIKSAAN LABORATORIUM</td>
           </tr>
           <tr>
-            <td class="param-name">Glukosa Darah Sewaktu</td>
-            <td class="result-value ${getStatusClass(data.glukosa, 70, 140)}">${data.glukosa || '-'}</td>
+            <td class="param-name">Glukosa Darah</td>
+            <td class="result-value">${data.glukosa || '-'}</td>
             <td class="unit">mg/dL</td>
-            <td class="normal-range">70 - 140 mg/dL</td>
-          </tr>
-          <tr>
-            <td class="param-name">Kolesterol Total</td>
-            <td class="result-value ${data.kolesterol > 200 ? 'status-warning' : 'status-normal'}">${data.kolesterol || '-'}</td>
-            <td class="unit">mg/dL</td>
-            <td class="normal-range">&lt; 200 mg/dL</td>
           </tr>
           <tr>
             <td class="param-name">Asam Urat</td>
-            <td class="result-value ${getUricAcidClass(data.asam_urat, data.jenis_kelamin)}">${data.asam_urat || '-'}</td>
+            <td class="result-value">${data.asam_urat || '-'}</td>
             <td class="unit">mg/dL</td>
-            <td class="normal-range">${data.jenis_kelamin === 'L' ? 'L: 3.4 - 7.0' : 'P: 2.4 - 6.0'} mg/dL</td>
+          </tr>
+          <tr>
+            <td class="param-name">Kolesterol Total</td>
+            <td class="result-value">${data.kolesterol || '-'}</td>
+            <td class="unit">mg/dL</td>
           </tr>
         </tbody>
       </table>
-    </div>
-    
-    <!-- Kesimpulan -->
-    <div class="conclusion">
-      <h3>📝 KESIMPULAN & REKOMENDASI</h3>
-      <p>${conclusion}</p>
     </div>
     
     <!-- Penutup -->
@@ -1794,7 +1711,7 @@ function generateMCUHTML(data) {
   </div>
 </body>
 </html>
-  `;
+  ';
 }
 
 /* ============================================================
