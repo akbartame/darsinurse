@@ -1548,11 +1548,6 @@ app.post('/api/external/get-layanan', async (req, res) => {
           tanggal_pelayanan: pelayanan.tanggal_pelayanan
         },
         
-        pasien: {
-          nama: patientData?.nama || pelayanan.nama_pasien || '-',
-          poli: patientData?.poli || '-'
-        },
-        
         mcu: mcu ? {
           waktu_pemeriksaan: mcu.waktu,
           
