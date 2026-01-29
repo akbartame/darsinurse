@@ -1326,6 +1326,131 @@ app.get('/api/mcu/by-patient/:emr', requireLogin, async (req, res) => {
 });
 
 // ============================================
+// ✅ PUBLIC API - GET MCU DATA ONLY (BY ID LAYANAN)
+// ============================================
+app.post('/api/external/get-mcu-data', async (req, res) => {
+  const { id_layanan } = req.body;
+  
+  if (!id_layanan) {
+    return res.status(400).json({
+      success: false,
+      error: 'ID Layanan (nomor kunjungan) harus diisi',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    // ✅ Query: Ambil data MCU dari table vitals berdasarkan id_kunjungan
+    const [mcuResults] = await conn.query(`
+      SELECT 
+        v.id,
+        v.emr_no,
+        v.id_kunjungan,
+        v.waktu,
+        v.heart_rate,
+        v.sistolik,
+        v.diastolik,
+        v.respirasi,
+        v.glukosa,
+        v.berat_badan_kg,
+        v.tinggi_badan_cm,
+        v.bmi,
+        v.suhu,
+        v.spo2,
+        v.asam_urat,
+        v.kolesterol,
+        p.nama AS nama_pasien,
+        p.tanggal_lahir,
+        p.jenis_kelamin,
+        p.poli
+      FROM vitals v
+      LEFT JOIN pasien p ON v.emr_no = p.emr_no
+      WHERE v.id_kunjungan = ?
+      ORDER BY v.waktu DESC
+      LIMIT 1
+    `, [parseInt(id_layanan)]);
+    
+    conn.release();
+    
+    if (mcuResults.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Data MCU tidak ditemukan untuk ID Layanan: ' + id_layanan,
+        id_layanan: id_layanan,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const mcu = mcuResults[0];
+    
+    // ✅ Hitung umur dari tanggal lahir
+    const birthDate = mcu.tanggal_lahir ? new Date(mcu.tanggal_lahir).getFullYear() : null;
+    const age = birthDate ? new Date().getFullYear() - birthDate : null;
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      data: {
+        id_vital: mcu.id,
+        id_layanan: mcu.id_kunjungan,
+        id_kunjungan: mcu.id_kunjungan,
+        
+        // Data Pasien
+        pasien: {
+          emr_no: mcu.emr_no,
+          nama: mcu.nama_pasien,
+          tanggal_lahir: mcu.tanggal_lahir,
+          umur: age,
+          jenis_kelamin: mcu.jenis_kelamin,
+          poli: mcu.poli
+        },
+        
+        // Data MCU - Antropometri
+        antropometri: {
+          tinggi_badan_cm: mcu.tinggi_badan_cm,
+          berat_badan_kg: mcu.berat_badan_kg,
+          bmi: mcu.bmi
+        },
+        
+        // Data MCU - Vital Signs
+        vital_signs: {
+          sistolik: mcu.sistolik,
+          diastolik: mcu.diastolik,
+          heart_rate: mcu.heart_rate,
+          respirasi: mcu.respirasi,
+          suhu: mcu.suhu,
+          spo2: mcu.spo2
+        },
+        
+        // Data MCU - Laboratorium
+        laboratorium: {
+          glukosa: mcu.glukosa,
+          asam_urat: mcu.asam_urat,
+          kolesterol: mcu.kolesterol
+        },
+        
+        // Waktu Pemeriksaan
+        waktu_pemeriksaan: mcu.waktu
+      }
+    });
+    
+  } catch (err) {
+    console.error('❌ External API Error (MCU):', err.message);
+    
+    if (conn) conn.release();
+    
+    res.status(500).json({
+      success: false,
+      error: 'Gagal mengambil data MCU: ' + err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ============================================
 // ✅ PUBLIC API - GET DATA BY NOMOR LAYANAN
 // ============================================
 app.post('/api/external/get-layanan', async (req, res) => {
@@ -1396,18 +1521,26 @@ app.post('/api/external/get-layanan', async (req, res) => {
       ORDER BY waktu DESC
     `, [kunjungan.id_kunjungan]);
     
-    // ✅ Query: Ambil data measurement lainnya (glukosa, bp, etc)
-    const [measurementResults] = await conn.query(`
-      SELECT *
-      FROM measurement_data
-      WHERE id_kunjungan = ?
-      ORDER BY waktu DESC
-    `, [kunjungan.id_kunjungan]);
+    // ✅ Query: Ambil data measurement lainnya (glukosa, bp, etc) - jika ada
+    let measurementResults = [];
+    try {
+      const [results] = await conn.query(`
+        SELECT *
+        FROM measurement_data
+        WHERE id_kunjungan = ?
+        ORDER BY waktu DESC
+      `, [kunjungan.id_kunjungan]);
+      measurementResults = results;
+    } catch (e) {
+      // Table measurement_data mungkin tidak ada, skip
+      console.warn('⚠ measurement_data table tidak ditemukan:', e.message);
+    }
     
     conn.release();
     
     // ✅ Format response
-    const age = new Date().getFullYear() - new Date(kunjungan.tanggal_lahir).getFullYear();
+    const birthDate = kunjungan.tanggal_lahir ? new Date(kunjungan.tanggal_lahir).getFullYear() : null;
+    const age = birthDate ? new Date().getFullYear() - birthDate : null;
     const latestVital = vitalsResults.length > 0 ? vitalsResults[0] : null;
     
     res.json({
