@@ -1711,7 +1711,7 @@ function generateMCUHTML(data) {
   </div>
 </body>
 </html>
-  ';
+  `;
 }
 
 /* ============================================================
@@ -2233,8 +2233,7 @@ app.post('/api/patients/register', requireLogin, async (req, res) => {
     
     conn.release();
     
-    console.log(`✓ Patient registered: EMR ${emrNo}, Name: ${nama}`);
-    
+    console.log(`✓ Patient registered: EMR ${emrStr}, Name: ${nama}`);
     res.json({ 
       success: true, 
       message: 'Pasien berhasil didaftarkan',
