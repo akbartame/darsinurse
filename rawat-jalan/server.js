@@ -1047,7 +1047,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
   const { 
     pelayanan_id,
     emr_no, 
-    nama_pasien,  // ← TAMBAH parameter ini dari frontend
+    nama_pasien,
     tanggal_pelayanan,
     unit,
     waktu, 
@@ -1067,7 +1067,14 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
   
   const emrStr = String(emr_no).trim();
   
+  // ✅ DEBUG LOG
+  console.log('=== MCU SAVE REQUEST ===');
+  console.log('EMR:', emrStr);
+  console.log('Nama:', nama_pasien);
+  console.log('Pelayanan ID:', pelayanan_id);
+  
   if (!emrStr || !nama_pasien) {
+    console.log('❌ Validation failed: EMR or nama_pasien empty');
     return res.status(400).json({ 
       success: false, 
       error: 'EMR dan Nama Pasien harus diisi' 
@@ -1080,15 +1087,21 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     
     // ✅ STEP 1: Cek apakah pasien sudah ada
     const [existingPatient] = await conn.query(
-      'SELECT emr_no FROM pasien WHERE emr_no = ?',
+      'SELECT emr_no, nama FROM pasien WHERE emr_no = ?',
       [emrStr]
     );
     
     let patientRegistered = existingPatient.length > 0;
+    let finalNamaPasien = nama_pasien;
     
-    // ✅ STEP 2: Jika belum ada, daftarkan pasien otomatis
-    if (!patientRegistered) {
-      console.log(`➕ Auto-registering patient: ${nama_pasien} (${emrStr})`);
+    // ✅ STEP 2: Handle patient registration
+    if (patientRegistered) {
+      // Patient exists - use database name
+      finalNamaPasien = existingPatient[0].nama;
+      console.log(`✓ Patient exists: ${finalNamaPasien} (${emrStr})`);
+    } else {
+      // New patient - register first
+      console.log(`➕ Auto-registering: ${nama_pasien} (${emrStr})`);
       
       try {
         await conn.query(`
@@ -1096,12 +1109,18 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
           VALUES (?, ?, NULL, 'L', 'MCU', '')
         `, [emrStr, nama_pasien]);
         
-        console.log(`✓ Patient auto-registered: ${nama_pasien}`);
         patientRegistered = true;
+        finalNamaPasien = nama_pasien;
+        console.log(`✓ Patient registered: ${nama_pasien}`);
         
       } catch (regErr) {
         if (regErr.code === 'ER_DUP_ENTRY') {
-          console.log('⚠️ Patient already exists (race condition), continuing...');
+          // Race condition - patient was just registered
+          const [recheck] = await conn.query(
+            'SELECT nama FROM pasien WHERE emr_no = ?', 
+            [emrStr]
+          );
+          finalNamaPasien = recheck[0].nama;
           patientRegistered = true;
         } else {
           throw regErr;
@@ -1109,7 +1128,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
       }
     }
     
-    // ✅ STEP 3: Simpan data pelayanan RSI jika ada
+    // ✅ STEP 3: Save pelayanan RSI if provided
     if (pelayanan_id && patientRegistered) {
       try {
         const [existingPelayanan] = await conn.query(
@@ -1122,16 +1141,16 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
             INSERT INTO pelayanan_rsi (
               pelayanan_id, emr_no, nama_pasien, tanggal_pelayanan, unit
             ) VALUES (?, ?, ?, ?, ?)
-          `, [pelayanan_id, emrStr, nama_pasien, tanggal_pelayanan, unit]);
+          `, [pelayanan_id, emrStr, finalNamaPasien, tanggal_pelayanan, unit]);
           
-          console.log(`✓ Pelayanan data saved: ID ${pelayanan_id}`);
+          console.log(`✓ Pelayanan saved: ID ${pelayanan_id}`);
         }
       } catch (pelayananErr) {
-        console.warn('⚠️ Could not save pelayanan data:', pelayananErr.message);
+        console.warn('⚠️ Could not save pelayanan:', pelayananErr.message);
       }
     }
     
-    // ✅ STEP 4: Simpan data MCU
+    // ✅ STEP 4: Save MCU vitals data
     const [result] = await conn.query(`
       INSERT INTO vitals (
         emr_no,
@@ -1170,7 +1189,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     
     conn.release();
     
-    console.log(`✓ MCU saved: ID ${result.insertId}, EMR ${emrStr}${pelayanan_id ? `, Pelayanan ${pelayanan_id}` : ''}`);
+    console.log(`✓ MCU saved: ID ${result.insertId}, EMR ${emrStr}`);
     
     res.json({ 
       success: true, 
@@ -1191,6 +1210,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     });
   }
 });
+
 // GET /api/mcu/patients - Dapatkan daftar pasien yang memiliki data MCU
 app.get('/api/mcu/patients', requireLogin, async (req, res) => {
   let conn;
