@@ -1610,25 +1610,98 @@ app.post('/api/external/get-layanan', async (req, res) => {
 // ✅ PUBLIC API - GET MCU DATA ONLY (BY PELAYANAN ID)
 // ============================================
 app.post('/api/external/get-mcu-data', async (req, res) => {
-        } : null,
-        
-        // Riwayat Vital Signs
-        riwayat_vitals: vitalsResults,
-        
-        // Measurement data lainnya
-        measurement_data: measurementResults
-      },
-      meta: {
-        total_vitals: vitalsResults.length,
-        total_measurements: measurementResults.length
+  const { no_layanan, pelayanan_id } = req.body;
+  const searchId = no_layanan || pelayanan_id;
+  
+  if (!searchId) {
+    return res.status(400).json({
+      success: false,
+      error: 'no_layanan atau pelayanan_id harus diisi',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    
+    // ✅ Ambil data MCU dari table vitals
+    const [mcuResults] = await conn.query(`
+      SELECT * FROM vitals
+      WHERE pelayanan_id = ? OR CAST(pelayanan_id AS CHAR) = ?
+      ORDER BY waktu DESC LIMIT 1
+    `, [parseInt(searchId) || 0, String(searchId)]);
+    
+    if (mcuResults.length === 0) {
+      conn.release();
+      return res.status(404).json({
+        success: false,
+        error: 'Data MCU tidak ditemukan',
+        pelayanan_id: searchId,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const mcu = mcuResults[0];
+    
+    // ✅ Ambil data pasien
+    let patientData = null;
+    if (mcu.emr_no) {
+      const [patientResults] = await conn.query(`
+        SELECT * FROM pasien WHERE emr_no = ? LIMIT 1
+      `, [mcu.emr_no]);
+      
+      if (patientResults.length > 0) {
+        patientData = patientResults[0];
+      }
+    }
+    
+    conn.release();
+    
+    let age = null;
+    if (patientData && patientData.tanggal_lahir) {
+      const birthDate = new Date(patientData.tanggal_lahir).getFullYear();
+      age = new Date().getFullYear() - birthDate;
+    }
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      data: {
+        pasien: {
+          emr_no: mcu.emr_no,
+          nama: patientData?.nama || '-',
+          umur: age
+        },
+        mcu: {
+          id_vital: mcu.id,
+          pelayanan_id: mcu.pelayanan_id,
+          waktu: mcu.waktu,
+          antropometri: {
+            tinggi_badan_cm: mcu.tinggi_badan_cm,
+            berat_badan_kg: mcu.berat_badan_kg,
+            bmi: mcu.bmi
+          },
+          vital_signs: {
+            sistolik: mcu.sistolik,
+            diastolik: mcu.diastolik,
+            heart_rate: mcu.heart_rate,
+            respirasi: mcu.respirasi,
+            suhu: mcu.suhu,
+            spo2: mcu.spo2
+          },
+          laboratorium: {
+            glukosa: mcu.glukosa,
+            asam_urat: mcu.asam_urat,
+            kolesterol: mcu.kolesterol
+          }
+        }
       }
     });
     
   } catch (err) {
     console.error('❌ External API Error:', err.message);
-    
     if (conn) conn.release();
-    
     res.status(500).json({
       success: false,
       error: 'Gagal mengambil data: ' + err.message,
