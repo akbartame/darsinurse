@@ -2692,7 +2692,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // ============ 14.5. MCU BLUETOOTH SCAN BUTTONS ============
   // ============ MCU BLUETOOTH SCAN BUTTONS ============
   document.getElementById('btn-scan-mcu-hr')?.addEventListener('click', () => {
-    scanMCUBLE('hr', HEART_RATE_SERVICE, HR_MEASUREMENT_CHAR, handleMCUHeartRate);
+    scanMCUHeartRateAndRR();
   });
 
   document.getElementById('btn-scan-mcu-glucose')?.addEventListener('click', () => {
@@ -3338,6 +3338,156 @@ async function scanMCUBLE(deviceType, service, characteristic, handler) {
         '<span class="text-danger"><i class="fas fa-times-circle"></i> Error: ' + err.message + '</span>';
       addLog(`MCU ${deviceType} scan error: ${err.message}`, 'error');
     }
+  }
+}
+
+// ============================================
+// SCAN MCU HEART RATE + RESPIRATORY RATE TOGETHER
+// ============================================
+async function scanMCUHeartRateAndRR() {
+  if (!navigator.bluetooth) {
+    alert('Browser tidak mendukung Web Bluetooth API!\nGunakan Chrome, Edge, atau Opera.');
+    addLog('Browser tidak support Bluetooth', 'error');
+    return;
+  }
+
+  const btnId = 'btn-scan-mcu-hr';
+  
+  try {
+    document.getElementById('mcu-hr-status').innerHTML = 
+      '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Mencari perangkat...</span>';
+    document.getElementById(btnId).disabled = true;
+    
+    addLog('Scanning MCU Heart Rate + Respiratory Rate...', 'info');
+    
+    // Request device yang support KEDUA services
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [
+        { services: [HEART_RATE_SERVICE] },
+        { services: [RESPIRATORY_RATE_SERVICE] }
+      ],
+      optionalServices: [HEART_RATE_SERVICE, RESPIRATORY_RATE_SERVICE]
+    });
+
+    mcuDevices['hr'] = device;
+    
+    document.getElementById('mcu-hr-status').innerHTML = 
+      '<span class="text-success"><i class="fas fa-check-circle"></i> Terhubung: ' + 
+      (device.name || 'Device') + '</span>';
+    addLog(`MCU device ditemukan: ${device.name}`, 'success');
+
+    const server = await device.gatt.connect();
+    
+    // ✅ Connect ke Heart Rate Service
+    try {
+      const hrService = await server.getPrimaryService(HEART_RATE_SERVICE);
+      const hrChar = await hrService.getCharacteristic(HR_MEASUREMENT_CHAR);
+      await hrChar.startNotifications();
+      
+      hrChar.addEventListener('characteristicvaluechanged', (event) => {
+        handleMCUHeartRateData(event);
+      });
+      
+      addLog('Heart Rate characteristic subscribed', 'success');
+    } catch (err) {
+      addLog(`Warning: Heart Rate service tidak tersedia: ${err.message}`, 'warning');
+    }
+    
+    // ✅ Connect ke Respiratory Rate Service
+    try {
+      const rrService = await server.getPrimaryService(RESPIRATORY_RATE_SERVICE);
+      const rrChar = await rrService.getCharacteristic(RR_MEASUREMENT_CHAR);
+      await rrChar.startNotifications();
+      
+      rrChar.addEventListener('characteristicvaluechanged', (event) => {
+        handleMCURespiratoryRateData(event);
+      });
+      
+      addLog('Respiratory Rate characteristic subscribed', 'success');
+    } catch (err) {
+      addLog(`Warning: Respiratory Rate service tidak tersedia: ${err.message}`, 'warning');
+    }
+    
+    document.getElementById('mcu-hr-status').innerHTML = 
+      '<span class="text-success"><i class="fas fa-check-circle"></i> Siap menerima data - lakukan pengukuran</span>';
+    document.getElementById('mcu-rr-status').innerHTML = 
+      '<span class="text-success"><i class="fas fa-check-circle"></i> Siap menerima data</span>';
+    addLog('MCU siap menerima Heart Rate & Respiratory Rate', 'success');
+
+    // Handle disconnect
+    device.addEventListener('gattserverdisconnected', () => {
+      document.getElementById('mcu-hr-status').innerHTML = 
+        '<span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Device terputus</span>';
+      document.getElementById('mcu-rr-status').innerHTML = 
+        '<span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Device terputus</span>';
+      document.getElementById(btnId).disabled = false;
+      addLog('MCU device terputus', 'error');
+      mcuDevices['hr'] = null;
+    });
+
+  } catch (err) {
+    document.getElementById(btnId).disabled = false;
+    
+    if (err.name === 'NotFoundError') {
+      document.getElementById('mcu-hr-status').innerHTML = 
+        '<span class="text-danger"><i class="fas fa-times-circle"></i> Device tidak ditemukan atau dibatalkan</span>';
+      addLog('User membatalkan atau device tidak ditemukan', 'error');
+    } else {
+      document.getElementById('mcu-hr-status').innerHTML = 
+        '<span class="text-danger"><i class="fas fa-times-circle"></i> Error: ' + err.message + '</span>';
+      addLog(`Scan error: ${err.message}`, 'error');
+    }
+  }
+}
+
+// Handler untuk Heart Rate Data (hanya extract HR)
+function handleMCUHeartRateData(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+    let hrValue = null;
+    const flags = bytes[0];
+
+    if ((flags & 0x01) === 0) {
+      hrValue = bytes[1];
+    } else {
+      hrValue = bytes[1] | (bytes[2] << 8);
+    }
+
+    if (hrValue !== null) {
+      document.getElementById('mcu-heart-rate').value = hrValue;
+      document.getElementById('mcu-hr-source').style.display = 'block';
+      document.getElementById('mcu-hr-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Heart Rate terukur: ' + hrValue + ' bpm</span>';
+      addLog(`MCU Heart Rate terukur: ${hrValue} bpm`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU heart rate: ${err.message}`, 'error');
+  }
+}
+
+// Handler untuk Respiratory Rate Data
+function handleMCURespiratoryRateData(event) {
+  try {
+    const value = event.target.value;
+    const bytes = new Uint8Array(value.buffer);
+    let rrValue = null;
+    const flags = bytes[0];
+
+    if ((flags & 0x01) === 0) {
+      rrValue = bytes[1];
+    } else {
+      rrValue = bytes[1] | (bytes[2] << 8);
+    }
+
+    if (rrValue !== null && rrValue > 0 && rrValue < 100) {
+      document.getElementById('mcu-respirasi').value = rrValue;
+      document.getElementById('mcu-rr-status').innerHTML = 
+        '<span class="text-success"><i class="fas fa-check-circle"></i> Respirasi terukur: ' + rrValue + ' per menit</span>';
+      addLog(`MCU Respirasi terukur: ${rrValue} per menit`, 'success');
+    }
+  } catch (err) {
+    addLog(`Error parsing MCU respiratory rate: ${err.message}`, 'error');
   }
 }
 
