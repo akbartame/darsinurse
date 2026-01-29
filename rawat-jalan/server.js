@@ -326,15 +326,73 @@ async function migrateAddEmrDokter() {
   }
 }
 
+async function fixVitalsDataTypes() {
+  const conn = await pool.getConnection();
+  
+  try {
+    console.log('🔧 Fixing vitals table data types...');
+    
+    // Get current column types
+    const [columns] = await conn.query(`
+      SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'vitals' 
+      AND COLUMN_NAME IN ('bmi', 'kolesterol', 'asam_urat', 'suhu')
+    `);
+    
+    const columnMap = {};
+    columns.forEach(col => {
+      columnMap[col.COLUMN_NAME] = col.COLUMN_TYPE;
+    });
+    
+    // Fix BMI
+    if (columnMap['bmi'] !== 'decimal(4,1)') {
+      console.log('  🔧 Fixing BMI column...');
+      await conn.query('ALTER TABLE vitals MODIFY COLUMN bmi DECIMAL(4,1) NULL');
+      console.log('  ✓ BMI fixed to DECIMAL(4,1)');
+    }
+    
+    // Fix Kolesterol
+    if (columnMap['kolesterol'] !== 'int') {
+      console.log('  🔧 Fixing kolesterol column...');
+      await conn.query('ALTER TABLE vitals MODIFY COLUMN kolesterol INT NULL');
+      console.log('  ✓ Kolesterol fixed to INT');
+    }
+    
+    // Fix Asam Urat
+    if (columnMap['asam_urat'] !== 'decimal(4,1)') {
+      console.log('  🔧 Fixing asam_urat column...');
+      await conn.query('ALTER TABLE vitals MODIFY COLUMN asam_urat DECIMAL(4,1) NULL');
+      console.log('  ✓ Asam Urat fixed to DECIMAL(4,1)');
+    }
+    
+    // Fix Suhu (presisi dari 4,2 ke 4,1)
+    if (columnMap['suhu'] === 'decimal(4,2)') {
+      console.log('  🔧 Fixing suhu column precision...');
+      await conn.query('ALTER TABLE vitals MODIFY COLUMN suhu DECIMAL(4,1) NULL');
+      console.log('  ✓ Suhu precision fixed to DECIMAL(4,1)');
+    }
+    
+    console.log('✓ Vitals data types fixed successfully');
+  } catch (err) {
+    console.error('❌ Fix data types error:', err);
+  } finally {
+    conn.release();
+  }
+}
+
 
 // Panggil setelah initDatabase()
 initDatabase()
-  .then(() => migrateAddEmrDokter())  // ← TAMBAH INI
+  .then(() => migrateAddEmrDokter())  
   .then(() => optimizeDatabase())
+  .then(() => fixVitalsDataTypes())
   .catch(err => {
     console.error('Failed to initialize:', err);
     process.exit(1);
   });
+
 
 /* ============================================================
    EXPRESS & SESSION SETUP
@@ -922,18 +980,20 @@ if (!emrStr) {
 // POST /api/mcu/save - Simpan data MCU lengkap
 app.post('/api/mcu/save', requireLogin, async (req, res) => {
   const { 
-    emr_no, waktu, 
-    tinggi_badan_cm,        // 1. TB
-    berat_badan_kg,         // 2. BB
-    bmi,                    // 3. BMI
-    sistolik, diastolik,    // 4. Tensi
-    heart_rate,             // 5. HR
-    respirasi,              // 6. RR
-    suhu,                   // 7. Suhu ← TAMBAH INI
-    spo2,                   // 8. SpO2 ← TAMBAH INI
-    glukosa,                // 9. Glukosa
-    asam_urat,              // 10. Asam Urat
-    kolesterol              // 11. Kolesterol
+    emr_no, 
+    pelayanan_id,  // ← TAMBAH INI
+    waktu, 
+    tinggi_badan_cm,
+    berat_badan_kg,
+    bmi,
+    sistolik, diastolik,
+    heart_rate,
+    respirasi,
+    suhu,
+    spo2,
+    glukosa,
+    asam_urat,
+    kolesterol
   } = req.body;
   
   const emrStr = String(emr_no).trim();
@@ -962,10 +1022,11 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
       });
     }
     
-    // ✅ INSERT dengan urutan yang benar
+    // ✅ INSERT dengan pelayanan_id
     const [result] = await conn.query(`
       INSERT INTO vitals (
-        emr_no, 
+        emr_no,
+        pelayanan_id,
         waktu,
         tinggi_badan_cm,
         berat_badan_kg,
@@ -979,9 +1040,10 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
         glukosa,
         asam_urat,
         kolesterol
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       emrStr,
+      pelayanan_id ? parseInt(pelayanan_id) : null,  // ← TAMBAH INI
       waktu || new Date(),
       tinggi_badan_cm ? parseInt(tinggi_badan_cm) : null,
       berat_badan_kg ? parseFloat(berat_badan_kg) : null,
@@ -990,8 +1052,8 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
       diastolik ? parseInt(diastolik) : null,
       heart_rate ? parseInt(heart_rate) : null,
       respirasi ? parseInt(respirasi) : null,
-      suhu ? parseFloat(suhu) : null,           // ← TAMBAH INI
-      spo2 ? parseInt(spo2) : null,             // ← TAMBAH INI
+      suhu ? parseFloat(suhu) : null,
+      spo2 ? parseInt(spo2) : null,
       glukosa ? parseInt(glukosa) : null,
       asam_urat ? parseFloat(asam_urat) : null,
       kolesterol ? parseInt(kolesterol) : null
@@ -999,7 +1061,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     
     conn.release();
     
-    console.log(`✓ MCU data saved: ID ${result.insertId}, EMR ${emrStr}`);
+    console.log(`✓ MCU data saved: ID ${result.insertId}, EMR ${emrStr}, Pelayanan ${pelayanan_id || 'N/A'}`);
     
     res.json({ 
       success: true, 
@@ -1009,6 +1071,7 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
   } catch (err) {
     if (conn) conn.release();
     console.error('❌ MCU save error:', err.message);
+    
     res.status(500).json({ 
       success: false, 
       error: 'Database error: ' + err.message 
@@ -1768,6 +1831,142 @@ app.get('/api/mcu/detail/:id', requireLogin, async (req, res) => {
     });
   }
 });
+
+/* ============================================================
+   RSI API INTEGRATION
+   ============================================================ */
+const axios = require('axios');
+
+// Fetch pelayanan data from RSI API
+app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
+  const { id_pelayanan } = req.body;
+  
+  if (!id_pelayanan) {
+    return res.status(400).json({
+      success: false,
+      error: 'ID Pelayanan harus diisi'
+    });
+  }
+  
+  try {
+    console.log(`🔍 Fetching pelayanan data for ID: ${id_pelayanan}`);
+    
+    const response = await axios.post(
+      'https://api.rsisurabaya.com:8008/registration/get-pelayanan-by-id',
+      { id_pelayanan: parseInt(id_pelayanan) },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+        httpsAgent: new (require('https').Agent)({
+          rejectUnauthorized: false
+        })
+      }
+    );
+    
+    console.log('✓ RSI API Response:', response.data);
+    
+    if (response.data && response.data.metadata && response.data.metadata.status) {
+      const pelayananData = response.data.response;
+      
+      if (pelayananData && pelayananData.length > 0) {
+        const data = pelayananData[0];
+        
+        let conn = await pool.getConnection();
+        
+        // ✅ 1. CEK APAKAH PASIEN SUDAH ADA
+        const [existingPatient] = await conn.query(
+          'SELECT * FROM pasien WHERE emr_no = ?',
+          [data.no_rm]
+        );
+        
+        // ✅ 2. SIMPAN/UPDATE DATA PELAYANAN RSI
+        const [existingPelayanan] = await conn.query(
+          'SELECT id FROM pelayanan_rsi WHERE pelayanan_id = ?',
+          [data.pelayanan_id]
+        );
+        
+        if (existingPelayanan.length === 0) {
+          // Insert data pelayanan baru
+          await conn.query(`
+            INSERT INTO pelayanan_rsi (
+              pelayanan_id,
+              emr_no,
+              nama_pasien,
+              tanggal_pelayanan,
+              unit
+            ) VALUES (?, ?, ?, ?, ?)
+          `, [
+            data.pelayanan_id,
+            data.no_rm,
+            data.pasien,
+            data.tgl,
+            data.unit
+          ]);
+          
+          console.log(`✓ Pelayanan data saved: ID ${data.pelayanan_id}`);
+        } else {
+          // Update jika sudah ada
+          await conn.query(`
+            UPDATE pelayanan_rsi 
+            SET 
+              nama_pasien = ?,
+              tanggal_pelayanan = ?,
+              unit = ?,
+              updated_at = NOW()
+            WHERE pelayanan_id = ?
+          `, [
+            data.pasien,
+            data.tgl,
+            data.unit,
+            data.pelayanan_id
+          ]);
+          
+          console.log(`✓ Pelayanan data updated: ID ${data.pelayanan_id}`);
+        }
+        
+        conn.release();
+        
+        res.json({
+          success: true,
+          data: data,
+          patient_exists: existingPatient.length > 0,
+          patient_info: existingPatient.length > 0 ? existingPatient[0] : null,
+          pelayanan_saved: true
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Data pelayanan tidak ditemukan'
+        });
+      }
+    } else {
+      res.status(404).json({
+        success: false,
+        error: response.data?.metadata?.message || 'Data tidak ditemukan'
+      });
+    }
+  } catch (err) {
+    console.error('❌ RSI API Error:', err.message);
+    
+    if (err.code === 'ECONNABORTED') {
+      res.status(408).json({
+        success: false,
+        error: 'Timeout connecting to RSI API'
+      });
+    } else if (err.response) {
+      res.status(err.response.status).json({
+        success: false,
+        error: `RSI API Error: ${err.response.statusText}`
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Gagal mengambil data dari RSI API: ' + err.message
+      });
+    }
+  }
+});
+
 /* ============================================================
    FALL DETECTION ROUTES
    ============================================================ */

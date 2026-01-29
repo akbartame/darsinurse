@@ -685,6 +685,28 @@
       .fall-alert {
         padding: 20px;
       }
+      /* RSI Integration Section */
+      .input-group {
+        display: flex;
+        gap: 8px;
+      }
+
+      .input-group .form-control {
+        flex: 1;
+      }
+
+      .input-group .btn {
+        white-space: nowrap;
+      }
+
+      #pelayanan-status .alert {
+        margin-bottom: 0;
+        font-size: 13px;
+      }
+
+      #pelayanan-status .alert:not(:last-child) {
+        margin-bottom: 8px;
+      }
     }
   </style>
 </head>
@@ -1234,6 +1256,51 @@
             <div class="card-body">
             <form id="form-mcu">
               <!-- Input EMR Pasien -->
+              <input type="hidden" id="mcu-pelayanan-id" value="">
+              
+              <!-- Section ID Pelayanan (yang sudah ada) -->
+              <div class="section">
+                <div class="section-title">
+                  <i class="fas fa-id-card"></i> Integrasi RSI Surabaya
+                </div>
+                
+                <div class="mb-3">
+                  <label class="form-label">ID Pelayanan RSI (Opsional)</label>
+                  <div class="input-group">
+                    <input type="text" 
+                          class="form-control" 
+                          id="mcu-id-pelayanan-input" 
+                          placeholder="Contoh: 123455">
+                    <button type="button" 
+                            class="btn btn-primary" 
+                            id="btn-fetch-pelayanan">
+                      <i class="fas fa-search"></i> Cari Data
+                    </button>
+                  </div>
+                  <small class="text-muted">
+                    <i class="fas fa-info-circle"></i> 
+                    Masukkan ID Pelayanan dari sistem RSI untuk auto-fill data pasien
+                  </small>
+                  <div id="pelayanan-status" class="mt-2"></div>
+                </div>
+              </div>
+              <hr>
+
+              <!-- Input EMR Pasien (existing) -->
+              <div class="mb-3">
+                <label class="form-label">EMR Pasien</label>
+                <input type="text" class="form-control" id="mcu-emr-pasien" placeholder="Masukkan EMR" required>
+                <small class="text-muted">Ketik EMR dan tekan Enter atau klik di luar kotak</small>
+                
+                <div id="mcu-patient-info" class="mt-2"></div>
+                
+                <div id="mcu-add-patient-btn" style="display:none;" class="mt-2">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="showMCUPatientForm()">
+                    <i class="fas fa-user-plus"></i> Daftar Pasien Baru
+                  </button>
+                </div>
+              </div>
+
               <div class="mb-3">
                 <label class="form-label">EMR Pasien</label>
                 <input type="text" class="form-control" id="mcu-emr-pasien" placeholder="Masukkan EMR" required>
@@ -1351,14 +1418,12 @@
               <div class="mb-3">
                 <label class="form-label">7. Suhu Tubuh (°C)</label>
                 <input type="number" step="0.1" class="form-control" id="mcu-suhu" placeholder="Contoh: 36.5" required>
-                <small class="text-muted">Normal: 36.5 - 37.5 °C</small>
               </div>
 
               <!-- 8. SPO2 ← TAMBAH FIELD BARU -->
               <div class="mb-3">
                 <label class="form-label">8. Saturasi Oksigen / SpO2 (%)</label>
                 <input type="number" class="form-control" id="mcu-spo2" placeholder="Contoh: 98" min="0" max="100" required>
-                <small class="text-muted">Normal: ≥95%</small>
               </div>
 
               <hr>
@@ -1369,14 +1434,6 @@
                 <div class="col-md-8">
                   <label class="form-label">9. Glukosa Darah (mg/dL)</label>
                   <input type="number" class="form-control" id="mcu-glucose" placeholder="Contoh: 95">
-                  <small id="mcu-glucose-source" class="text-success" style="display:none;">
-                    <i class="fas fa-check-circle"></i> Data dari Bluetooth
-                  </small>
-                </div>
-                <div class="col-md-4 d-grid align-items-end">
-                  <button type="button" class="btn btn-primary btn-sm" id="btn-scan-mcu-glucose">
-                    <i class="fa-brands fa-bluetooth"></i> Scan
-                  </button>
                 </div>
               </div>
               <div class="mb-3">
@@ -1387,14 +1444,12 @@
               <div class="mb-3">
                 <label class="form-label">10. Asam Urat (mg/dL)</label>
                 <input type="number" step="0.1" class="form-control" id="mcu-asam-urat" placeholder="Contoh: 5.5" required>
-                <small class="text-muted">Normal Pria: 3.4-7.0 | Wanita: 2.4-6.0</small>
               </div>
 
               <!-- 11. KOLESTEROL -->
               <div class="mb-3">
                 <label class="form-label">11. Kolesterol Total (mg/dL)</label>
                 <input type="number" class="form-control" id="mcu-cholesterol" placeholder="Contoh: 200" required>
-                <small class="text-muted">Normal: <200 mg/dL</small>
               </div>
 
               <!-- Buttons -->
@@ -3339,6 +3394,150 @@ function stopMCUBLE(deviceType) {
     addLog(`Error disconnect MCU ${deviceType}: ${err.message}`, 'error');
   }
 }
+
+// ============================================
+// RSI API INTEGRATION
+// ============================================
+
+// Button handler untuk fetch pelayanan data
+// Update button handler
+document.getElementById('btn-fetch-pelayanan')?.addEventListener('click', async function() {
+  const idPelayanan = document.getElementById('mcu-id-pelayanan-input').value.trim();
+  const statusDiv = document.getElementById('pelayanan-status');
+  
+  if (!idPelayanan) {
+    statusDiv.innerHTML = '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> Masukkan ID Pelayanan terlebih dahulu</div>';
+    return;
+  }
+  
+  this.disabled = true;
+  this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mencari...';
+  
+  try {
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Mengambil data dari RSI API...</div>';
+    
+    const response = await fetch('/api/rsi/get-pelayanan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_pelayanan: idPelayanan })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      const data = result.data;
+      
+      statusDiv.innerHTML = `
+        <div class="alert alert-success">
+          <strong><i class="fas fa-check-circle"></i> Data ditemukan dan tersimpan!</strong><br>
+          <small>Pasien: ${data.pasien} | No. RM: ${data.no_rm} | Unit: ${data.unit} | Tanggal: ${data.tgl}</small>
+        </div>
+      `;
+      
+      // ✅ SIMPAN PELAYANAN_ID KE HIDDEN FIELD
+      document.getElementById('mcu-pelayanan-id').value = data.pelayanan_id;
+      
+      // Auto-fill EMR
+      document.getElementById('mcu-emr-pasien').value = data.no_rm;
+      
+      if (result.patient_exists) {
+        await validateMCUPatient(data.no_rm);
+        addLog(`Data pelayanan loaded & saved: ${data.pasien} (${data.no_rm})`, 'success');
+      } else {
+        statusDiv.innerHTML += `
+          <div class="alert alert-warning mt-2">
+            <i class="fas fa-exclamation-triangle"></i> 
+            Pasien belum terdaftar di sistem. Silakan daftar terlebih dahulu.
+          </div>
+        `;
+        
+        document.getElementById('mcu-add-patient-btn').style.display = 'block';
+        document.getElementById('mcu-new-emr').value = data.no_rm;
+        document.getElementById('mcu-new-nama').value = data.pasien;
+        
+        addLog(`Data pelayanan loaded, pasien perlu didaftarkan: ${data.pasien}`, 'info');
+      }
+    } else {
+      statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> ${result.error}</div>`;
+      addLog(`Error fetching pelayanan: ${result.error}`, 'error');
+    }
+  } catch (err) {
+    statusDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle"></i> Error: ${err.message}</div>`;
+    addLog(`Network error: ${err.message}`, 'error');
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="fas fa-search"></i> Cari Data';
+  }
+});
+
+// Update form submit untuk include pelayanan_id
+document.getElementById('form-mcu')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const emr = document.getElementById('mcu-emr-pasien').value.trim();
+  const pelayananId = document.getElementById('mcu-pelayanan-id').value.trim(); // ← TAMBAH INI
+  
+  const isValid = await validateMCUPatient(emr);
+  if (!isValid) {
+    alert('❌ Pasien tidak valid! Silakan daftar pasien terlebih dahulu.');
+    return;
+  }
+  
+  const data = {
+    emr_no: emr,
+    pelayanan_id: pelayananId || null,  // ← TAMBAH INI
+    waktu: document.getElementById('mcu-waktu').value,
+    tinggi_badan_cm: document.getElementById('mcu-height').value,
+    berat_badan_kg: document.getElementById('mcu-weight').value,
+    bmi: document.getElementById('mcu-bmi').value,
+    sistolik: document.getElementById('mcu-sistolik').value,
+    diastolik: document.getElementById('mcu-diastolik').value,
+    heart_rate: document.getElementById('mcu-heart-rate').value,
+    respirasi: document.getElementById('mcu-respirasi').value,
+    suhu: document.getElementById('mcu-suhu').value,
+    spo2: document.getElementById('mcu-spo2').value,
+    glukosa: document.getElementById('mcu-glucose').value,
+    asam_urat: document.getElementById('mcu-asam-urat').value,
+    kolesterol: document.getElementById('mcu-cholesterol').value
+  };
+  
+  try {
+    showStatus('mcu', '⏳ Menyimpan data MCU...', 'info');
+    const response = await fetch('/api/mcu/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      alert('✓ Data MCU berhasil disimpan!');
+      showStatus('mcu', `✓ Data MCU berhasil disimpan! ID: ${result.id}`, 'success');
+      addLog(`MCU saved for EMR ${data.emr_no}${pelayananId ? ` (Pelayanan: ${pelayananId})` : ''}`, 'success');
+      
+      setTimeout(() => {
+        backToMenu();
+        document.getElementById('form-mcu').reset();
+        document.getElementById('mcu-patient-info').innerHTML = '';
+        document.getElementById('mcu-patient-registration').style.display = 'none';
+        document.getElementById('mcu-pelayanan-id').value = '';  // ← RESET
+      }, 1500);
+    } else {
+      showStatus('mcu', `✗ Error: ${result.error}`, 'danger');
+    }
+  } catch (err) {
+    showStatus('mcu', `✗ Network Error: ${err.message}`, 'danger');
+  }
+});
+
+// Optional: Enter key support untuk ID Pelayanan
+document.getElementById('mcu-id-pelayanan')?.addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('btn-fetch-pelayanan').click();
+  }
+});
+
   </script>
 </body>
 </html>
