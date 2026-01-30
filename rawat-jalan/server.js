@@ -1439,8 +1439,8 @@ app.post('/api/external/get-mcu-data', async (req, res) => {
           kolesterol: mcu.kolesterol
         },
         
-        // Waktu Pemeriksaan (format string, tidak dikonversi timezone)
-        waktu_pemeriksaan: mcu.waktu ? new Date(mcu.waktu).toISOString().replace('Z', '').replace('T', ' ').substring(0, 19) : null
+        // Waktu Pemeriksaan (langsung dari database, sudah dalam timezone +07:00 WIB)
+        waktu_pemeriksaan: mcu.waktu || null
       }
     });
     
@@ -1551,7 +1551,7 @@ app.post('/api/external/get-layanan', async (req, res) => {
         },
         
         mcu: mcu ? {
-          waktu_pemeriksaan: mcu.waktu ? new Date(mcu.waktu).toISOString().replace('Z', '').replace('T', ' ').substring(0, 19) : null,
+          waktu_pemeriksaan: mcu.waktu || null,
           
           antropometri: {
             tinggi_badan_cm: mcu.tinggi_badan_cm,
