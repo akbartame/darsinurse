@@ -4,7 +4,7 @@
 # Save as: Makefile (di root project)
 # ============================================================
 
-.PHONY: help build up down restart logs clean status health backup
+.PHONY: help build up down restart logs clean status health backup test-branch
 
 help: ## Show this help message
 	@echo "Darsinurse Gateway - Docker Commands"
@@ -106,3 +106,33 @@ install: ## Install dependencies locally (for development)
 	cd rawat-jalan && npm install
 	cd monitoring && npm install
 	@echo "✅ Dependencies installed!"
+
+test-branch: ## Checkout BRANCH and run tests in subprojects. Usage: make test-branch BRANCH=feature/x
+	@if [ -z "$(BRANCH)" ]; then \
+		echo "❌ Please specify branch: make test-branch BRANCH=branch-name"; \
+		exit 1; \
+	fi
+	@echo "🔁 Preparing to test branch '$(BRANCH)'..."
+	@OLD_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
+	git fetch origin; \
+	if ! git rev-parse --verify origin/$(BRANCH) >/dev/null 2>&1; then \
+		echo "❌ Branch '$(BRANCH)' not found on origin"; \
+		exit 1; \
+	fi; \
+	git checkout $(BRANCH); \
+	git pull origin $(BRANCH); \
+	echo "✅ Checked out $(BRANCH)"; \
+	if [ -f rawat-jalan/package.json ]; then \
+		echo "▶ Running tests in rawat-jalan..."; \
+		(cd rawat-jalan && (npm ci --silent || npm install --no-audit --no-fund --silent)) && (cd rawat-jalan && npm test); \
+	else \
+		echo "ℹ️  rawat-jalan has no package.json, skipping"; \
+	fi; \
+	if [ -f monitoring/package.json ]; then \
+		echo "▶ Running tests in monitoring..."; \
+		(cd monitoring && (npm ci --silent || npm install --no-audit --no-fund --silent)) && (cd monitoring && npm test); \
+	else \
+		echo "ℹ️  monitoring has no package.json, skipping"; \
+	fi; \
+	echo "🔁 Restoring branch $$OLD_BRANCH"; \
+	git checkout $$OLD_BRANCH
