@@ -74,10 +74,10 @@ health: ## Check health of all services
 
 db-check: ## Run database sanity check
 	@echo "🔎 Running database sanity check..."
-	@if command -v php >/dev/null 2>&1; then \
-		php db_sanity_check.php; \
+	@if php db_sanity_check.php 2>/dev/null; then \
+		exit 0; \
 	else \
-		echo "⚠️  PHP not found locally, running in Docker..."; \
+		echo "⚠️  Running in Docker container..."; \
 		docker compose exec -T darsinurse-app php /var/www/db_sanity_check.php; \
 	fi
 
