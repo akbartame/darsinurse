@@ -30,6 +30,18 @@ const hashPassword = (password) => {
   return crypto.createHash('sha256').update(password).digest('hex');
 };
 
+// Normalize various gender representations to 'L' or 'P'
+function normalizeGender(jenis_kelamin) {
+  if (!jenis_kelamin) return null;
+  const jk = String(jenis_kelamin).trim().toUpperCase();
+  const femaleKeys = ['P', 'PEREMPUAN', 'WANITA', 'F', 'FEMALE'];
+  const maleKeys = ['L', 'LAKI', 'PRIA', 'M', 'MALE'];
+
+  if (femaleKeys.some(k => jk.includes(k))) return 'P';
+  if (maleKeys.some(k => jk.includes(k))) return 'L';
+  return null;
+}
+
 /* ============================================================
    DATABASE CONNECTION (MySQL)
    ============================================================ */
@@ -1052,6 +1064,8 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
     nama_pasien,
     tanggal_pelayanan,
     unit,
+    usia,
+    jenis_kelamin,
     waktu, 
     tinggi_badan_cm,
     berat_badan_kg,
@@ -1106,14 +1120,24 @@ app.post('/api/mcu/save', requireLogin, async (req, res) => {
       console.log(`➕ Auto-registering: ${nama_pasien} (${emrStr})`);
       
       try {
+        // Calculate tanggal_lahir from usia if provided
+        let tanggal_lahir = null;
+        if (usia && usia > 0) {
+          const today = new Date();
+          const birthYear = today.getFullYear() - parseInt(usia);
+          tanggal_lahir = `${birthYear}-01-01`; // Approx birth date
+        }
+        
+        // Normalize gender using helper
+        const gender = normalizeGender(jenis_kelamin) || null;
         await conn.query(`
           INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat)
-          VALUES (?, ?, NULL, 'L', 'MCU', '')
-        `, [emrStr, nama_pasien]);
+          VALUES (?, ?, ?, ?, 'MCU', '')
+        `, [emrStr, nama_pasien, tanggal_lahir, gender]);
         
         patientRegistered = true;
         finalNamaPasien = nama_pasien;
-        console.log(`✓ Patient registered: ${nama_pasien}`);
+        console.log(`✓ Patient registered: ${nama_pasien} (Gender: ${gender}, Age: ${usia})`);
         
       } catch (regErr) {
         if (regErr.code === 'ER_DUP_ENTRY') {
@@ -2418,7 +2442,9 @@ app.post('/api/rsi/get-pelayanan', requireLogin, async (req, res) => {
             no_rm: data.no_rm,
             pasien: data.pasien,
             tgl: data.tgl,
-            unit: data.unit
+            unit: data.unit,
+            usia: data.usia,
+            jenis_kelamin: data.jenis_kelamin
           },
           patient_exists: patientExists,
           patient_info: patientExists ? existingPatient[0] : null,
@@ -2519,15 +2545,8 @@ app.post('/api/mcu/save-with-registration', requireLogin, async (req, res) => {
           tanggal_lahir = `${birthYear}-01-01`; // Approx birth date
         }
         
-        // ✅ Normalize jenis_kelamin dari RSI API (LAKI-LAKI → L, PEREMPUAN → P)
-        let gender = 'L';
-        if (jenis_kelamin) {
-          if (jenis_kelamin.toUpperCase().includes('PEREMPUAN')) {
-            gender = 'P';
-          } else if (jenis_kelamin.toUpperCase().includes('LAKI')) {
-            gender = 'L';
-          }
-        }
+        // Normalize jenis_kelamin using helper
+        const gender = normalizeGender(jenis_kelamin) || null;
         
         await conn.query(`
           INSERT INTO pasien (emr_no, nama, tanggal_lahir, jenis_kelamin, poli, alamat)
