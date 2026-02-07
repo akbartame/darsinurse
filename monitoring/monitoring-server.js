@@ -292,6 +292,7 @@ app.post('/login', async (req, res) => {
   console.log('🔐 Login attempt for EMR:', emr_perawat);
   
   if (!emr_perawat || !password) {
+    console.warn('⚠️ Missing credentials');
     return res.render('monitoring-login', { 
       error: 'EMR Perawat dan Password harus diisi!' 
     });
@@ -299,6 +300,7 @@ app.post('/login', async (req, res) => {
   
   const emrInt = parseInt(emr_perawat);
   if (isNaN(emrInt)) {
+    console.warn('⚠️ Invalid EMR format:', emr_perawat);
     return res.render('monitoring-login', { 
       error: 'EMR Perawat harus berupa angka!' 
     });
@@ -307,46 +309,49 @@ app.post('/login', async (req, res) => {
   const hash = hashPassword(password);
   
   try {
-    const [rows] = await pool.query(
+    console.log('🔍 Querying database for EMR:', emrInt);
+    const conn = await pool.getConnection();
+    const [rows] = await conn.query(
       'SELECT * FROM perawat WHERE emr_perawat = ?',
       [emrInt]
     );
+    conn.release();
+    console.log('📊 Query result: found', rows.length, 'user(s)');
 
     if (rows.length === 0) {
+      console.warn('⚠️ EMR not found:', emrInt);
       return res.render('monitoring-login', { 
         error: 'EMR Perawat tidak ditemukan!' 
       });
     }
 
     const user = rows[0];
+    console.log('👤 User found:', { nama: user.nama, role: user.role });
     
-    if (user.password !== hash) {
+    if (user.password === hash) {
+      console.log('✅ Password verified, setting session');
+      req.session.emr_perawat = user.emr_perawat;
+      req.session.nama_perawat = user.nama;
+      req.session.role = user.role;
+      req.session.loginTime = new Date().toISOString();
+      
+      console.log('✅ Session set for:', user.nama);
+      return res.redirect('/');
+    } else {
+      console.warn('⚠️ Password mismatch for EMR:', emrInt);
       return res.render('monitoring-login', { 
         error: 'Password salah!' 
       });
     }
-
-    req.session.emr_perawat = user.emr_perawat;
-    req.session.nama_perawat = user.nama;
-    req.session.role = user.role;
-    req.session.loginTime = new Date().toISOString();
-    
-    req.session.save((saveErr) => {
-      if (saveErr) {
-        console.error('❌ Save error:', saveErr);
-        return res.render('monitoring-login', { 
-          error: 'Gagal menyimpan session!' 
-        });
-      }
-      
-      console.log('✅ Session saved for:', user.nama);
-      res.redirect('/');
-    });
     
   } catch (err) {
     console.error('❌ Database error:', err);
-    return res.render('monitoring-login', { 
-      error: 'Terjadi kesalahan sistem: ' + err.message 
+    console.error('   Code:', err.code);
+    console.error('   Message:', err.message);
+    console.error('   SQL:', err.sql);
+    return res.status(500).json({ 
+      error: 'Terjadi kesalahan sistem: ' + err.message,
+      code: err.code
     });
   }
 });
@@ -2196,10 +2201,56 @@ async function checkFallDetectionFromDatabase() {
 const fallCheckIntervalId = setInterval(checkFallDetectionFromDatabase, FALL_CHECK_INTERVAL);
 
 /* ============================================================
+   HEALTH CHECK ENDPOINT
+   ============================================================ */
+app.get('/health', async (req, res) => {
+  try {
+    const connection = await pool.getConnection();
+    await connection.ping();
+    connection.release();
+    res.json({ 
+      status: 'healthy',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('❌ Health check failed:', err);
+    res.status(503).json({
+      status: 'unhealthy',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/* ============================================================
+   TEST DATABASE CONNECTION ON STARTUP
+   ============================================================ */
+const testDatabaseConnection = async () => {
+  try {
+    const connection = await pool.getConnection();
+    console.log('✓ Database connection test: SUCCESS');
+    console.log(`  Host: ${process.env.DB_HOST || 'localhost'}`);
+    console.log(`  Database: ${process.env.DB_NAME || 'darsinurse'}`);
+    console.log(`  User: ${process.env.DB_USER || 'root'}`);
+    connection.release();
+    return true;
+  } catch (err) {
+    console.error('❌ Database connection test: FAILED');
+    console.error(`  Error: ${err.message}`);
+    console.error(`  Host: ${process.env.DB_HOST || 'localhost'}`);
+    console.error(`  Database: ${process.env.DB_NAME || 'darsinurse'}`);
+    console.error(`  User: ${process.env.DB_USER || 'root'}`);
+    return false;
+  }
+};
+
+/* ============================================================
    START SERVER
    ============================================================ */
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`
 ╔════════════════════════════════════════╗
 ║   DARSINURSE MONITORING SERVER         ║
@@ -2208,6 +2259,9 @@ server.listen(PORT, () => {
 ║   Session: MySQL Persistent            ║
 ╚════════════════════════════════════════╝
 `);
+  
+  // Test database connection
+  await testDatabaseConnection();
 });
 
 process.on('SIGTERM', () => {
