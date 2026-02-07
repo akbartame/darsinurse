@@ -175,17 +175,13 @@ mqttClient.on('reconnect', () => {
    EXPRESS CONFIGURATION (CORRECT ORDER!)
    ============================================================ */
 
-// 0. Request logging
+// 0. Request logging for debugging
 app.use((req, res, next) => {
-  if (req.path === '/login' || req.path === '/health' || req.path === '/debug/users') {
-    console.log(`📨 ${req.method} ${req.path}`);
-    if (req.method === 'POST') {
-      console.log('   Body:', req.body);
-      console.log('   Headers:', { 
-        'content-type': req.headers['content-type'],
-        'origin': req.headers['origin']
-      });
-    }
+  if (req.path === '/login') {
+    console.log(`\n📨 ${req.method.toUpperCase()} ${req.path}`);
+    console.log(`   Content-Type: ${req.headers['content-type']}`);
+    console.log(`   Body:`, req.body);
+    console.log(`   Keys in body:`, Object.keys(req.body || {}));
   }
   next();
 });
@@ -306,32 +302,38 @@ app.post('/login', async (req, res) => {
   
   console.log('🔐 Login attempt for EMR:', emr_perawat);
   
-  if (!emr_perawat || !password) {
-    console.warn('⚠️ Missing credentials');
-    return res.render('monitoring-login', { 
-      error: 'EMR Perawat dan Password harus diisi!' 
-    });
-  }
-  
-  const emrInt = parseInt(emr_perawat);
-  if (isNaN(emrInt)) {
-    console.warn('⚠️ Invalid EMR format:', emr_perawat);
-    return res.render('monitoring-login', { 
-      error: 'EMR Perawat harus berupa angka!' 
-    });
-  }
-  
-  const hash = hashPassword(password);
-  
   try {
-    console.log('🔍 Querying database for EMR:', emrInt);
+    if (!emr_perawat || !password) {
+      console.warn('⚠️ Missing credentials');
+      return res.render('monitoring-login', { 
+        error: 'EMR Perawat dan Password harus diisi!' 
+      });
+    }
+    
+    const emrInt = parseInt(emr_perawat);
+    if (isNaN(emrInt)) {
+      console.warn('⚠️ Invalid EMR format:', emr_perawat);
+      return res.render('monitoring-login', { 
+        error: 'EMR Perawat harus berupa angka!' 
+      });
+    }
+    
+    const hash = hashPassword(password);
+    console.log('✓ Password hashed');
+    
+    console.log('🔍 Getting database connection...');
     const conn = await pool.getConnection();
+    console.log('✓ Connection acquired');
+    
+    console.log('🔍 Querying database for EMR:', emrInt);
     const [rows] = await conn.query(
       'SELECT * FROM perawat WHERE emr_perawat = ?',
       [emrInt]
     );
+    console.log('✓ Query executed, found', rows.length, 'user(s)');
+    
     conn.release();
-    console.log('📊 Query result: found', rows.length, 'user(s)');
+    console.log('✓ Connection released');
 
     if (rows.length === 0) {
       console.warn('⚠️ EMR not found:', emrInt);
@@ -343,27 +345,30 @@ app.post('/login', async (req, res) => {
     const user = rows[0];
     console.log('👤 User found:', { nama: user.nama, role: user.role });
     
-    if (user.password === hash) {
-      console.log('✅ Password verified, setting session');
-      req.session.emr_perawat = user.emr_perawat;
-      req.session.nama_perawat = user.nama;
-      req.session.role = user.role;
-      req.session.loginTime = new Date().toISOString();
-      
-      console.log('✅ Session set for:', user.nama);
-      return res.redirect('/');
-    } else {
+    if (user.password !== hash) {
       console.warn('⚠️ Password mismatch for EMR:', emrInt);
       return res.render('monitoring-login', { 
         error: 'Password salah!' 
       });
     }
+
+    console.log('✅ Password verified');
+    console.log('📝 Setting session data...');
+    
+    req.session.emr_perawat = user.emr_perawat;
+    req.session.nama_perawat = user.nama;
+    req.session.role = user.role;
+    req.session.loginTime = new Date().toISOString();
+    
+    console.log('✅ Session data set, redirecting to /');
+    res.redirect('/');
     
   } catch (err) {
-    console.error('❌ Database error:', err);
-    console.error('   Code:', err.code);
+    console.error('\n❌ LOGIN ERROR:');
     console.error('   Message:', err.message);
-    console.error('   SQL:', err.sql);
+    console.error('   Stack:', err.stack);
+    console.error('   Code:', err.code);
+    console.error('');
     return res.render('monitoring-login', { 
       error: 'Terjadi kesalahan sistem: ' + err.message 
     });
