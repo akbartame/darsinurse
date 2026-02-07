@@ -53,11 +53,6 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 20,              // Increase dari 10 → 20
   queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10000,
-  maxIdle: 10,                      // Jumlah koneksi idle yang dipertahankan
-  idleTimeout: 60000,               // Timeout untuk idle connections
-  acquireTimeout: 30000,            // Timeout untuk mendapatkan koneksi
   timezone: '+07:00',               // ✅ Set timezone ke WIB (UTC+7) untuk Indonesia
   dateStrings: true                 // ✅ Return dates as strings, not Date objects
 });
