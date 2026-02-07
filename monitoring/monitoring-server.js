@@ -217,12 +217,26 @@ app.use(session({
 }));
 
 // 5. CORS
-const allowedOrigins = [
-  'https://gateway.darsinurse.hint-lab.id',
-  'https://darsinurse.hint-lab.id',
-  'http://localhost:3000',
-  'http://localhost:5000'
-];
+// Parse ALLOWED_ORIGINS from environment or use defaults
+const getDefaultOrigins = () => {
+  const defaults = [
+    'https://gateway.darsinurse.hint-lab.id',
+    'https://darsinurse.hint-lab.id',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://10.147.20.75:5000',
+    'http://10.147.20.75:4000'
+  ];
+  
+  if (process.env.ALLOWED_ORIGINS) {
+    const envOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+    return [...new Set([...defaults, ...envOrigins])]; // Merge and deduplicate
+  }
+  return defaults;
+};
+
+const allowedOrigins = getDefaultOrigins();
+console.log('✅ CORS Allowed Origins:', allowedOrigins);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -230,6 +244,7 @@ app.use(cors({
       callback(null, true);
     } else {
       console.warn('❌ CORS blocked:', origin);
+      console.warn('   Allowed:', allowedOrigins);
       callback(new Error('CORS policy violation'));
     }
   },
