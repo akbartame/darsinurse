@@ -2239,29 +2239,41 @@ app.get('/health', async (req, res) => {
 });
 
 /* ============================================================
-   DEBUG ENDPOINT - Show perawat table contents (REMOVE IN PRODUCTION!)
+   DEBUG ENDPOINT - Test login (REMOVE IN PRODUCTION!)
    ============================================================ */
-app.get('/debug/users', async (req, res) => {
-  // Only allow if DEBUG_MODE is explicitly true
+app.post('/debug/test-login', async (req, res) => {
   if (process.env.DEBUG_MODE !== 'true') {
     return res.status(403).json({ error: 'Debug endpoint disabled. Set DEBUG_MODE=true' });
   }
   
+  const { emr_perawat, password } = req.body;
+  console.log('🔍 TEST LOGIN:', { emr_perawat, passwordLength: password?.length });
+  
   try {
     const conn = await pool.getConnection();
-    const [users] = await conn.query('SELECT emr_perawat, nama, role FROM perawat LIMIT 10');
+    const [rows] = await conn.query('SELECT * FROM perawat WHERE emr_perawat = ?', [parseInt(emr_perawat)]);
     conn.release();
     
+    if (rows.length === 0) {
+      return res.json({ success: false, reason: 'User not found', emr_searched: emr_perawat });
+    }
+    
+    const user = rows[0];
+    const hash = hashPassword(password);
+    
     res.json({
-      total: users.length,
-      users: users,
-      debug: 'ENABLED'
+      success: hash === user.password,
+      reason: hash === user.password ? 'Password match' : 'Password mismatch',
+      user: { emr_perawat: user.emr_perawat, nama: user.nama, role: user.role },
+      passwordProvided: password,
+      hashProvided: hash,
+      hashStored: user.password,
+      match: hash === user.password
     });
+    
   } catch (err) {
-    console.error('❌ Debug error:', err);
-    res.status(500).json({
-      error: err.message
-    });
+    console.error('❌ Test login error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
